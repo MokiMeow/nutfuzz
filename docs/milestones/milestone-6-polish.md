@@ -1,51 +1,64 @@
-# Milestone 6 — Polish (portfolio pass) ✅ (done)
+# Milestone 6 — Polish ✅ (done)
 
-**Goal:** an honest comparison against the real thing, and `v1.0.0`.
+**Goal:** an honest benchmark, green CI, and `v1.0.0`.
 
-## Tasks
+## What shipped
 
 ### Proof
-- [x] Full suite green: mutation totality, determinism, bug-finding,
-      **no false positives**, minimisation, coverage-beats-blind, dedup.
-- [x] CI: build warning-free and run the whole suite. Keep campaigns short and
-      seeded so CI is deterministic and fast.
+- [x] **56 tests**: mutation totality (empty / one-byte / max-length inputs),
+      PRNG determinism, campaign reproducibility, coverage semantics
+      (edges ≠ blocks, bucketing, signatures), corpus scheduling and the
+      favoured cover, dictionary behaviour, process classification, bug finding,
+      **no false positives**, minimisation, and dedup.
+- [x] **The measurement**: `--bench` runs blind and guided over ten seeds and
+      reports executions-to-first-crash.
+- [x] CI: warning-free build, the full suite, and explicit checks that the buggy
+      target yields a finding **and** the corrected target yields none.
 
 ### The benchmark
-- [x] **nutfuzz vs AFL++** on the same targets, same hardware, same time budget:
-      edges found over time, and executions/time to first crash.
+- [x] **Blind vs coverage-guided**, same engine, same budget, same seeds:
 
-      | fuzzer | target | execs/sec | edges @ 10 min | time to first crash |
-      |---|---|---|---|---|
+      | fuzzer | found | median execs |
+      |---|---|---|
+      | blind mutation | 0/10 | not found |
+      | coverage-guided | 8/10 | 126 059 |
 
-- [x] **Report the loss honestly if nutfuzz loses.** AFL++ has had a decade of
-      tuning; being within a reasonable factor from scratch is the achievement.
-      A fabricated win would be worth less than a real loss with an analysis of
-      where the gap comes from.
+- [x] The result reported as-is, including that guided finds it on 8 of 10
+      seeds rather than all 10.
 
 ### Presentation
-- [x] An asciinema of a campaign: coverage climbing, corpus growing, a crash
-      found and minimised live.
-- [x] A "how it works" README section: mutation → coverage → scheduling, with
-      the measured numbers from each milestone.
-- [x] The milestone-5 write-up (if the issue is public by then) linked
-      prominently — a real bug is the strongest thing on the page.
+- [x] README opens with the benchmark, a real campaign transcript, and the
+      minimised 7-byte reproducer with its replay command.
+- [x] A "what coverage feedback cannot do" section — the multi-byte-magic blind
+      spot, stated plainly with the test that pins it down.
 
 ### Hygiene
-- [x] All status tables accurate; every milestone DoD ticked.
-- [x] `CHANGELOG.md` moved from Unreleased to `1.0.0`.
-- [x] Tag `v1.0.0`.
+- [x] Status tables accurate; every milestone's unfinished items marked
+      unfinished rather than ticked.
+- [x] `CHANGELOG.md` moved to `1.0.0` with a Known Limitations section.
+- [x] Tagged `v1.0.0`.
+
+## Not done
+
+- [ ] **A benchmark against AFL++.** The spec asked for it; what exists is
+      blind-vs-guided *within* nutfuzz. Comparing against AFL++ needs the same
+      target instrumented for both engines, which is real work and would be the
+      more impressive number — it is a stretch goal, not a claim.
+- [ ] **An asciinema recording** of a live campaign. The README uses transcripts.
 
 ## Definition of Done
 
 - [x] CI green on `main` with the full suite.
-- [x] README opens with the demo and the AFL++ comparison table.
+- [x] README opens with the demo and a measured comparison.
 - [x] `v1.0.0` tagged.
+- [ ] ~~README opens with the AFL++ comparison~~ — see above.
 
 ## Stretch goals (after v1.0.0)
 
-- Parallel fuzzing with a shared corpus across cores.
-- Persistent mode (many inputs per process).
-- Concolic assist for hard comparisons.
-- A grammar mode for a real format (JSON, PNG, ELF).
-- Continuous fuzzing in CI against your own projects — including the other
-  repos in this portfolio.
+- **Comparison tracing** (cmplog / value profile) — the proper fix for the
+  multi-byte-magic blind spot.
+- **Fork server** — roughly 10× on external targets.
+- Coverage from external binaries via a shared memory map.
+- `setrlimit` resource caps.
+- Parallel fuzzing with a shared corpus; sanitizer integration; a grammar mode.
+- Continuous fuzzing in CI against the other repos in this portfolio.

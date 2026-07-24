@@ -1,60 +1,76 @@
 # Milestone 1 — Coverage feedback ✅ (done)
 
-**Goal:** keep inputs that reach new code, so the fuzzer solves one condition at
-a time instead of needing to hit them all at once. This is the milestone that
-makes it a *real* fuzzer.
+**Goal:** keep inputs that reach new code, so the fuzzer solves one gate at a
+time instead of needing to hit them all at once. This is the milestone that
+makes it a real fuzzer.
 
-## Concepts
+## What shipped
 
-Edge coverage, the AFL bitmap, hit-count bucketing, and the corpus as a growing
-set of interesting inputs.
+- [x] **A harder target** — `parse_nested`, a bug behind **seven** gates (four
+      magic bytes checked individually, a version, a mode, a size). Confirmed by
+      test that blind mutation cannot reach it.
+- [x] **Instrumentation** — in-process targets call `cov.trace(id)` at each
+      branch. Production fuzzers get these callbacks from the compiler
+      (`-fsanitize-coverage=trace-pc-guard`); doing it by hand keeps the
+      machinery visible. The feedback loop is identical either way.
+- [x] **Edge bitmap** — 64 KiB, indexed by `hash(block) ^ prev` with
+      `prev = hash(block) >> 1`, so A→B and B→A stay distinct.
+- [x] **Hit-count buckets** (1, 2, 3, 4–7, 8–15, 16–31, 32–127, 128+).
+- [x] **The feedback loop** — an input that hits a new edge or a higher bucket
+      is added to the corpus.
+- [x] **Collision metric** — `GlobalMap::fill_rate()`.
+- [x] **The measurement** — executions-to-first-crash, blind vs guided, median
+      of 10 seeds.
 
-## Tasks
+## Not done
 
-- [x] **A harder target**: add `parse_nested` with a bug behind 3–4 nested
-      conditions (magic bytes, then a version check, then a length check).
-      Confirm the M0 blind fuzzer **cannot** find it in a large budget — that
-      failure is the baseline this milestone must beat.
-- [x] **Instrumentation**: record edges from the target. Start in-process for
-      Rust targets (`-C instrument-coverage` or a trace-pc-guard callback);
-      external binaries are milestone 3.
-- [x] **Edge bitmap**: a fixed-size byte map indexed by
-      `cur_location ^ prev_location`, with `prev_location >>= 1`. Document why
-      the XOR identifies an *edge* and why the shift avoids A→B/B→A collisions.
-- [x] **Hit-count buckets** (1, 2, 3, 4–7, 8–15, 16–31, 32–127, 128+) so loop
-      iteration counts don't flood the corpus.
-- [x] **The feedback loop**: after each run, if any new edge or new bucket was
-      hit, add the input to the corpus.
-- [x] **Non-determinism detection**: run a new input twice; if the bitmaps
-      differ, flag it rather than letting it pollute the corpus forever.
-- [x] **Collision metric**: report bitmap fill rate so collisions are visible.
-- [x] **The measurement** (this *is* the milestone): executions-to-first-crash
-      on the nested target, median of 10 seeds, blind vs coverage-guided.
+- [ ] **Non-determinism detection** (run each new input twice, compare bitmaps,
+      flag targets whose coverage varies). The in-process targets here are
+      deterministic by construction, so it would be untested scaffolding; it
+      becomes necessary the moment real external software is fuzzed. Listed
+      rather than silently dropped.
 
-## Files
+## Verified result
 
-`src/coverage.rs`, `src/fuzzer.rs` (feedback in the loop), `src/target.rs`
-(nested target), `benches/` or `tests/coverage_wins.rs`, `docs/06-coverage.md`.
+300 000 executions, 10 seeds, on `parse_nested`:
+
+| fuzzer | found | median executions to first crash |
+|---|---|---|
+| blind mutation | **0/10** | not found |
+| coverage-guided | **8/10** | **126 059** |
+
+Blind fuzzing burned three million executions and found nothing.
 
 ## Definition of Done
 
-- [x] The nested-condition bug is found by the coverage-guided fuzzer and
-      **not** by the blind one within the same budget — asserted by a test.
-- [x] A published table with real numbers:
-
-      | fuzzer | executions to first crash (median of 10 seeds) |
-      |---|---|
-
-- [x] The corpus demonstrably grows as new edges are found (assert it).
-- [x] The false-positive test still passes on the fixed target.
-- [x] Determinism still holds: same seed, same run.
+- [x] The gated bug is found by the guided fuzzer and **not** by the blind one
+      in the same budget — asserted by a test.
+- [x] A published table with real numbers (above).
+- [x] The corpus demonstrably grows as edges are found (asserted).
+- [x] The false-positive test still passes on corrected targets.
+- [x] Determinism holds: same seed, same run, same iteration.
 - [x] Build warning-free; all earlier tests green.
 
-## Notes
+## What was learned (worth keeping)
 
-If coverage guidance does not beat blind fuzzing by a wide margin on a
-nested-condition target, the implementation is wrong — check that edges are
-actually being recorded and that the corpus is actually growing. A "coverage
-fuzzer" whose corpus never grows is just a slower blind fuzzer.
+**Two real failures, both caught by tests rather than reasoning.**
+
+**1. A multi-byte comparison is opaque to coverage.** The first version of the
+target compared the magic with one `!=` on a 4-byte slice. Guided fuzzing then
+performed *exactly* like blind — 3 edges, corpus never grew. There is no edge
+for "three of four bytes correct", so there is no gradient to climb. That is a
+genuine limit of coverage guidance, and it is why dictionaries and comparison
+tracing exist. The `parse_magic` target and its tests preserve the lesson.
+
+**2. Sequential block ids collide under XOR.** With ids 20–30, `22^10` and
+`23^11` both land on index 28 — two distinct edges recorded as one, and the
+signal quietly disappears. AFL assigns *random* compile-time ids for exactly
+this reason. Fixed by hashing the id; a test now asserts each correct magic byte
+uncovers a new edge.
+
+Both failures were silent: nothing crashed, nothing errored, the fuzzer just
+stopped finding things. That is the characteristic failure mode of a broken
+coverage map, and the reason this milestone's Definition of Done is a
+*measurement* rather than "the code exists".
 
 **Next:** [Milestone 2 — Corpus scheduling](milestone-2-scheduling.md).

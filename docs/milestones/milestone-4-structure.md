@@ -1,52 +1,56 @@
-# Milestone 4 — Structure-aware input ✅ (done)
+# Milestone 4 — Structure-aware input ✅ (dictionaries done)
 
-**Goal:** get past the gates that stop byte-level mutation cold — magic numbers,
-keywords, and checksums.
+**Goal:** get past gates that stop byte-level mutation cold — magic numbers and
+keywords.
 
-## Concepts
+## Why this milestone exists
 
-Dictionaries, token-level mutation, grammar-aware generation, and why checksums
-defeat naive fuzzers.
+Milestone 1 established the limit precisely: a single multi-byte comparison
+gives coverage feedback **no partial credit**, so a guided fuzzer stalls exactly
+like a blind one. A dictionary turns that impossible gate into one mutation.
 
-## Tasks
+## What shipped
 
-- [x] **Dictionaries**: load a token list (`"REC"`, `"PNG"`, `"<?xml"`, format
-      keywords) and add mutations that insert or overwrite with a token. Random
-      bytes essentially never produce a 4-byte magic value; a dictionary makes
-      it a single mutation.
-- [x] **Auto-dictionary**: harvest constants seen in comparisons during
-      execution (libFuzzer's value profile idea) so the dictionary builds
-      itself.
-- [x] **Token-aware mutation** for text formats: mutate at token boundaries
-      rather than mid-token, so the input stays parseable enough to reach deep
-      code.
-- [x] **A grammar mode**: for one real format, generate structurally valid
-      inputs and mutate within the structure.
-- [x] **Checksum handling**: document the problem — if the target rejects
-      everything failing a CRC, no mutation gets past the front door. The fixes
-      are patching out the check, or a post-mutation fixup that recomputes it.
-      Implement the fixup hook.
-- [x] **Measure**: coverage reached with and without the dictionary on a
-      magic-byte-gated target.
+- [x] **Dictionaries** — a token list with two mutations: *overwrite* bytes at a
+      random offset with a token, and *insert* one without removing anything.
+      A token longer than the input is prepended rather than skipped.
+- [x] **CLI integration** — `--dict FUZZ,REC` seeds the dictionary; roughly one
+      mutation round in four applies a token.
+- [x] **`Dictionary::learn`** — adds a token at runtime, ignoring empties,
+      over-long tokens and duplicates so the dictionary cannot grow unbounded.
+- [x] **The measurement that justifies it** — on `parse_magic` (a 4-byte
+      `memcmp` gate):
+      - guided fuzzing **fails** to open it in 150 000 executions,
+      - the same campaign **with** `"FUZZ"` in the dictionary opens it.
+      Both directions are asserted, so the test would fail if either the
+      limitation or the fix stopped being real.
 
-## Files
+## Not done
 
-`src/dictionary.rs`, `src/mutate.rs` (token mutations), `src/grammar.rs`,
-`dictionaries/`, `docs/09-structure.md`.
+- [ ] **Auto-dictionary harvesting.** `learn()` exists but nothing calls it
+      automatically — collecting constants seen in comparisons needs the target's
+      comparison instructions intercepted (libFuzzer's value profile, AFL's
+      cmplog). That is the *proper* fix for the multi-byte-magic blind spot and
+      is listed as the top stretch goal.
+- [ ] **Token-aware mutation for text formats** (mutating at token boundaries).
+- [ ] **A grammar mode** for a real format.
+- [ ] **Checksum handling / fixup hook** — a target that rejects everything
+      failing a CRC admits nothing at all. The fixes are patching out the check
+      or recomputing it after mutation; neither is implemented.
 
 ## Definition of Done
 
-- [x] A target gated behind a 4-byte magic value is reached quickly **with** a
-      dictionary and effectively not without — shown with numbers.
-- [x] The auto-dictionary harvests at least one constant that a hand-written one
-      would have needed.
-- [x] A checksum-gated target is reachable via the fixup hook.
+- [x] A target gated behind a 4-byte magic is opened **with** a dictionary and
+      demonstrably not without — asserted in both directions.
+- [x] The dictionary refuses junk and duplicates.
 - [x] The false-positive and determinism tests still pass.
 - [x] Build warning-free; all earlier tests green.
+- [ ] ~~Auto-dictionary harvests a constant~~ — not implemented.
+- [ ] ~~A checksum-gated target is reachable~~ — not implemented.
 
 ## Notes
 
 This is where fuzzing stops being "throw bytes" and becomes "speak the format
-badly on purpose" — which is what finds bugs in real parsers.
+badly on purpose", which is what finds bugs in real parsers.
 
 **Next:** [Milestone 5 — A real bug](milestone-5-real-target.md).
