@@ -55,4 +55,13 @@ already-public, fixed issues**), `docs/10-disclosure.md`.
 Finding a bug is the easy half; handling it well is what makes it worth putting
 your name on.
 
+## Audit status — 2026-07-25
+
+The external campaign runner, deterministic corpus loading, minimisation, and
+private artifact path are implemented and tested. The owner explicitly limited
+this audit to normal safe engineering work, so no third-party fuzzing or
+vulnerability workflow was launched. None of the Definition of Done items
+above are claimed; [the disclosure workflow](../10-disclosure.md) records the
+requirements for a future authorised campaign.
+
 **Next:** [Milestone 6 — Polish](milestone-6-polish.md).

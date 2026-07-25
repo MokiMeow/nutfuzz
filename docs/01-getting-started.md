@@ -67,6 +67,11 @@ Same seed, same mutations, same crash, same iteration number.
 | `--seed N` | PRNG seed; the reproducibility handle |
 | `--iterations N` | execution budget |
 | `--keep-going` | don't stop at the first crash |
+| `--external PROGRAM` | run a local authorised binary as a blind target |
+| `--arg VALUE` | add one target argument; repeat as needed |
+| `--corpus DIR` | load seed files in deterministic sorted order |
+| `--timeout-ms N` | per-execution external timeout |
+| `--artifacts DIR` | private output directory for minimised findings |
 | `--list` | list available targets |
 
 ## Tests
@@ -75,8 +80,20 @@ Same seed, same mutations, same crash, same iteration number.
 cargo test
 ```
 
-23 tests: mutation totality (empty / one-byte / max-length inputs), PRNG
-determinism, bug-finding, **false positives**, and minimisation.
+65 tests: mutation totality (empty / one-byte / max-length inputs), PRNG
+determinism, coverage and scheduling, external process behavior, deterministic
+artifacts, bug-finding, **false positives**, and minimisation.
+
+## Safe external smoke test
+
+This exercises the external path against a known-clean local program:
+
+```bash
+cargo run --release -- --external /bin/true --iterations 20 --seed 42
+```
+
+It must report 20 executions and no crashes or hangs. See
+[external targets](07-external-targets.md) before using another program.
 
 ## Reading the output
 

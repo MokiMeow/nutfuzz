@@ -4,6 +4,34 @@ All notable changes to nutfuzz are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-07-25
+
+### Added
+- A deterministic external-campaign API and CLI with sorted corpus loading,
+  repeatable target arguments, bounded execution, dictionary mutation,
+  signal/hang-preserving minimisation, deduplication, and stable artifacts.
+- Tests proving clean and missing binaries are not findings, campaigns replay
+  from their seed, artifact names are stable, and large unread inputs still
+  time out.
+- Owner-only (`0600`) Unix permissions for temporary inputs and finding
+  artifacts.
+
+### Fixed
+- Back external stdin with a temporary file so a target that never reads cannot
+  fill a pipe and block before timeout enforcement starts.
+- Kill a timed-out Unix process group rather than leaving target descendants
+  running.
+- Enforce the 64 KiB input cap for dictionary insertion and long-token
+  overwrite, and validate constructor tokens through the same bounded learning
+  path.
+- Make CI genuinely warning-denied and align the crate version with its release
+  tags.
+
+### Safety
+- No third-party campaign or vulnerability workflow was run. Milestone 5
+  remains explicitly pending until an authorised campaign and real disclosure
+  provide evidence.
+
 ## [1.0.0] — 2026-07-25
 
 Coverage-guided fuzzing that provably finds bugs blind mutation cannot.

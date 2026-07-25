@@ -10,7 +10,7 @@ provably cannot" — measured.
 | 0 | **Mutation core** ✅ | seeded RNG, mutation engine, fuzz loop, minimiser | how mutation fuzzers work; determinism as a contract |
 | 1 | **Coverage** ✅ | edge bitmap, bucketing, the feedback loop | why guidance beats blind — and where it doesn't |
 | 2 | **Scheduling** ✅ | corpus energy, greedy set-cover favoured set, crash dedup | where fuzzing time should go |
-| 3 | **External targets** ✅ | process execution, signal vs hang vs exit | crashes and hangs are different bugs |
+| 3 | **External targets** ✅ | deterministic CLI campaigns, process-tree timeout, minimised artifacts | crashes and hangs are different bugs |
 | 4 | **Dictionaries** ✅ | token insert/overwrite, auto-learning | getting past gates coverage can't open |
 | 5 | **A real bug** ◐ | the harness and workflow — no campaign run | see below |
 | 6 | **Polish** ✅ | benchmark, CI, `v1.0.0` | honest reporting |
@@ -41,12 +41,20 @@ Marking it ✅ would be the exact overclaim this project's rules forbid, so it i
 marked ◐ with the workflow written down in
 [milestone 5](milestones/milestone-5-real-target.md) for whoever runs it.
 
-## Definition of Done — met
+The July 2026 audit intentionally did not launch one: the owner requested
+normal safe engineering work only. The external runner itself was completed
+and regression-tested without targeting third-party software.
+
+## Engineering capability — met; whole-project DoD still pending
 
 nutfuzz uses coverage feedback to find bugs a blind mutation fuzzer provably
 cannot, demonstrates the difference with measured executions-to-first-crash
 across ten seeds, runs against external binaries, reports zero false positives
 on corrected targets, and reproduces every finding from a seed.
+
+The original whole-project Definition of Done in `AGENTS.md` additionally
+requires a genuine authorised third-party finding and responsible disclosure.
+That remains unmet with milestone 5 and is not implied by the completed engine.
 
 ## Stretch goals (after v1.0.0)
 
