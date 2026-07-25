@@ -1,0 +1,14 @@
+[package]
+name = "nutfuzz"
+version = "0.1.0"
+edition = "2021"
+description = "A coverage-guided fuzzer built from the mutation engine up"
+license = "MIT"
+
+# No dependencies: the PRNG, the mutation engine, the corpus scheduler and the
+# coverage feedback loop are the project. See docs/decisions/.
+[dependencies]
+
+[profile.release]
+opt-level = 3
+debug = true          # keep symbols so crash backtraces are readable

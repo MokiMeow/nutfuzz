@@ -1,0 +1,24 @@
+# Rust build artifacts
+/target/
+Cargo.lock
+
+# Fuzzing output — reproducers for unfixed third-party bugs must never be
+# committed to a public repository (see docs/decisions/0003-defensive-scope.md)
+/crashes/
+/findings/
+/corpus/
+
+# Temp / logs
+*.log
+*.out
+verify.sh
+
+# Editor / OS cruft
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local build-agent scaffolding, not part of the project
+PROMPTS.md
