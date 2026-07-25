@@ -1,0 +1,36 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: sudo apt-get update && sudo apt-get install -y cargo rustc
+
+      - name: Build (warnings are failures)
+        run: |
+          cargo build --release 2>&1 | tee build.log
+          ! grep -q "^warning" build.log
+
+      - name: Test
+        run: cargo test
+
+      - name: It finds the planted bug
+        run: |
+          out=$(cargo run --release --quiet)
+          echo "$out"
+          echo "$out" | grep -q "crash(es) found"
+
+      - name: It reports nothing on the fixed target (no false positives)
+        run: |
+          out=$(cargo run --release --quiet -- --target parse_record_fixed --iterations 200000)
+          echo "$out"
+          echo "$out" | grep -q "no crashes found"
