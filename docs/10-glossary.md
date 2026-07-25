@@ -17,8 +17,8 @@
   the suite must prove silence on corrected code.
 - **Fork server** — forking a target already past initialisation instead of
   `exec`ing it fresh; AFL's big speed win.
-- **Hang** — a target exceeding its time budget. A real bug, but a different
-  class from a crash.
+- **Hang** — a target exceeding its time budget. A finding to triage separately
+  from a crash; intentional long-running work must be ruled out.
 - **Havoc** — applying a random stack of mutations in one round; what actually
   drives discovery.
 - **Hit-count bucketing** — recording *roughly* how often an edge was taken

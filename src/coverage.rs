@@ -16,8 +16,8 @@
 //!
 //! How targets report edges: production fuzzers get these callbacks from the
 //! compiler (`-fsanitize-coverage=trace-pc-guard`). nutfuzz's in-process
-//! targets call [`Coverage::trace`] by hand, and external binaries report via
-//! a shared map (milestone 3). The feedback machinery is identical either way.
+//! targets call [`Coverage::trace`] by hand. External binaries currently run
+//! blind; compiler instrumentation plus a shared map remains future work.
 
 pub const MAP_SIZE: usize = 1 << 16; // 64 KiB, as AFL uses
 

@@ -5,6 +5,7 @@
 //! single mutation. This is why real fuzzers ship format dictionaries, and why
 //! a fuzzer without one looks mysteriously bad on structured formats.
 
+use crate::mutate::MAX_LEN;
 use crate::rng::Rng;
 
 #[derive(Default, Clone)]
@@ -22,9 +23,11 @@ impl Dictionary {
         I: IntoIterator<Item = T>,
         T: Into<Vec<u8>>,
     {
-        Self {
-            tokens: tokens.into_iter().map(Into::into).collect(),
+        let mut dictionary = Self::new();
+        for token in tokens {
+            dictionary.learn(token);
         }
+        dictionary
     }
 
     pub fn is_empty(&self) -> bool {
@@ -58,6 +61,9 @@ impl Dictionary {
         let token = &self.tokens[rng.below(self.tokens.len())];
         if token.len() > input.len() {
             // Too long to overwrite in place — put it at the front instead.
+            if input.len().saturating_add(token.len()) > MAX_LEN {
+                return;
+            }
             let at = 0;
             input.splice(at..at, token.iter().copied());
             return;
@@ -72,6 +78,9 @@ impl Dictionary {
             return;
         }
         let token = &self.tokens[rng.below(self.tokens.len())];
+        if input.len().saturating_add(token.len()) > MAX_LEN {
+            return;
+        }
         let at = rng.below(input.len() + 1);
         input.splice(at..at, token.iter().copied());
     }
@@ -80,6 +89,7 @@ impl Dictionary {
 #[cfg(test)]
 mod tests {
     use super::Dictionary;
+    use crate::mutate::MAX_LEN;
     use crate::rng::Rng;
 
     #[test]
@@ -134,5 +144,26 @@ mod tests {
         let mut input = b"xy".to_vec();
         dict.insert(&mut input, &mut rng);
         assert_eq!(input.len(), 4);
+    }
+
+    #[test]
+    fn tokens_never_grow_an_input_past_the_cap() {
+        let dictionary = Dictionary::from_tokens(["FUZZ"]);
+        let mut rng = Rng::new(5);
+        let mut input = vec![b'x'; MAX_LEN];
+        dictionary.insert(&mut input, &mut rng);
+        dictionary.overwrite(&mut input, &mut rng);
+        assert_eq!(input.len(), MAX_LEN);
+    }
+
+    #[test]
+    fn constructor_rejects_empty_duplicate_and_oversized_tokens() {
+        let dictionary = Dictionary::from_tokens([
+            Vec::new(),
+            b"token".to_vec(),
+            b"token".to_vec(),
+            vec![b'x'; 33],
+        ]);
+        assert_eq!(dictionary.len(), 1);
     }
 }

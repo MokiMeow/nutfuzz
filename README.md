@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/lang-Rust-orange" alt="Rust">
   <img src="https://img.shields.io/badge/deps-none-brightgreen" alt="no dependencies">
   <img src="https://img.shields.io/badge/reproducible-seeded-blue" alt="deterministic">
-  <img src="https://img.shields.io/badge/release-v1.0.0-brightgreen" alt="v1.0.0">
+  <img src="https://img.shields.io/badge/release-v1.1.0-brightgreen" alt="v1.1.0">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT">
 </p>
 
@@ -106,6 +106,10 @@ comparison tracing (AFL's cmplog, libFuzzer's value profile).
 - **External targets** — run real binaries, and tell a **crash** (SIGSEGV/
   SIGABRT/…) from a **hang** (timeout) from a program correctly rejecting bad
   input with a non-zero exit. Conflating those is a classic mistake.
+- **Deterministic external campaigns** — sorted seed corpora, bounded process
+  execution, signal/hang-preserving minimisation, and stable artifacts. The
+  external path remains blind until shared-memory coverage instrumentation is
+  added. ([docs/07-external-targets.md](docs/07-external-targets.md))
 - **Determinism as a contract** — every decision comes from one seeded PRNG, so
   `--seed N` replays a campaign byte for byte, including the iteration a crash
   appeared on.
@@ -119,10 +123,11 @@ cargo run --release -- --target parse_nested --mode blind   # the baseline
 cargo run --release -- --bench                       # blind vs guided, 10 seeds
 cargo run --release -- --dict FUZZ                   # with a dictionary
 cargo run --release -- --seed 42 --iterations 500000
-cargo test                                           # 56 tests
+cargo run --release -- --external /bin/true --iterations 20
+cargo test --release                                 # 65 tests
 ```
 
-## Status — complete
+## Status — engine complete; authorised real-world campaign pending
 
 | # | Milestone | State |
 |---|-----------|-------|
@@ -135,12 +140,13 @@ cargo test                                           # 56 tests
 | 6 | Benchmarks, CI, `v1.0.0` | ✅ done |
 
 **Milestone 5, honestly:** the machinery to fuzz real external software is
-built and tested (process execution, signal/hang classification, dictionaries,
-minimisation, dedup). **No genuine third-party bug has been found or disclosed
-through it** — that is a campaign to run, not a line of code to write, and
-claiming otherwise would be exactly the kind of overstatement this project
-avoids. See [milestone 5](docs/milestones/milestone-5-real-target.md) for how
-to run one properly.
+built and tested (CLI, deterministic corpus loading, process-tree timeouts,
+signal/hang classification, dictionaries, minimisation, artifacts, and dedup).
+**No genuine third-party bug has been found or disclosed through it.** The
+owner explicitly kept this audit to normal safe engineering, so no external
+vulnerability campaign was launched. See
+[milestone 5](docs/milestones/milestone-5-real-target.md) and the
+[safe campaign workflow](docs/10-disclosure.md).
 
 ## Scope and ethics
 
@@ -154,7 +160,7 @@ here is the search technique.
 
 ```
 nutfuzz/
-├── src/          # rng, mutations, coverage, corpus, dictionary, exec, loop
+├── src/          # rng, mutation, coverage, corpus, exec, external runner
 ├── tests/        # bug-finding, false positives, and coverage-beats-blind
 ├── docs/         # mutation, coverage, roadmap, milestones, ADRs
 └── Cargo.toml    # zero dependencies

@@ -11,6 +11,8 @@
 ## Concept references
 
 - [06 — Coverage feedback](06-coverage.md)
+- [07 — External targets](07-external-targets.md)
+- [10 — Safe campaign and disclosure](10-disclosure.md)
 - [10 — Glossary](10-glossary.md)
 
 ## Milestones

@@ -5,7 +5,7 @@
 ## What shipped
 
 ### Proof
-- [x] **56 tests**: mutation totality (empty / one-byte / max-length inputs),
+- [x] **65 tests**: mutation totality (empty / one-byte / max-length inputs),
       PRNG determinism, campaign reproducibility, coverage semantics
       (edges ≠ blocks, bucketing, signatures), corpus scheduling and the
       favoured cover, dictionary behaviour, process classification, bug finding,
