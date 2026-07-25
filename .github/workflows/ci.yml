@@ -29,7 +29,7 @@ jobs:
         run: |
           out=$(cargo run --release --quiet)
           echo "$out"
-          echo "$out" | grep -q "crash(es) found"
+          echo "$out" | grep -q "1 unique bug(s)"
 
       - name: It reports nothing on the fixed target (no false positives)
         run: |
