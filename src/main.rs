@@ -9,13 +9,23 @@
 //!   nutfuzz --list
 
 use std::process::ExitCode;
+use std::time::Duration;
 
+use nutfuzz::exec::ExternalTarget;
 use nutfuzz::fuzzer::{fuzz, minimise, render, Config, Mode};
-use nutfuzz::{target, Dictionary};
+use nutfuzz::{
+    fuzz_external, load_corpus, target, write_artifacts, Dictionary, ExternalConfig,
+};
 
 fn main() -> ExitCode {
     let mut config = Config::default();
     let mut target_name = String::from("parse_record");
+    let mut external_program = None;
+    let mut external_args = Vec::new();
+    let mut corpus_path = None;
+    let mut artifact_path = String::from("crashes");
+    let mut timeout_ms = 1_000;
+    let mut iterations_set = false;
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -31,6 +41,41 @@ fn main() -> ExitCode {
                 match args.get(i) {
                     Some(name) => target_name = name.clone(),
                     None => return fail("--target needs a name"),
+                }
+            }
+            "--external" => {
+                i += 1;
+                match args.get(i) {
+                    Some(program) => external_program = Some(program.clone()),
+                    None => return fail("--external needs a program"),
+                }
+            }
+            "--arg" => {
+                i += 1;
+                match args.get(i) {
+                    Some(argument) => external_args.push(argument.clone()),
+                    None => return fail("--arg needs a value"),
+                }
+            }
+            "--corpus" => {
+                i += 1;
+                match args.get(i) {
+                    Some(path) => corpus_path = Some(path.clone()),
+                    None => return fail("--corpus needs a directory"),
+                }
+            }
+            "--artifacts" => {
+                i += 1;
+                match args.get(i) {
+                    Some(path) => artifact_path = path.clone(),
+                    None => return fail("--artifacts needs a directory"),
+                }
+            }
+            "--timeout-ms" => {
+                i += 1;
+                match args.get(i).and_then(|value| value.parse::<u64>().ok()) {
+                    Some(value) if value > 0 => timeout_ms = value,
+                    _ => return fail("--timeout-ms needs a positive number"),
                 }
             }
             "--mode" => {
@@ -51,7 +96,10 @@ fn main() -> ExitCode {
             "--iterations" => {
                 i += 1;
                 match args.get(i).and_then(|v| v.parse().ok()) {
-                    Some(n) => config.max_iterations = n,
+                    Some(n) => {
+                        config.max_iterations = n;
+                        iterations_set = true;
+                    }
                     None => return fail("--iterations needs a number"),
                 }
             }
@@ -69,6 +117,18 @@ fn main() -> ExitCode {
             other => return fail(&format!("unknown argument '{other}'")),
         }
         i += 1;
+    }
+
+    if let Some(program) = external_program {
+        return run_external(
+            program,
+            external_args,
+            corpus_path,
+            artifact_path,
+            timeout_ms,
+            iterations_set,
+            config,
+        );
     }
 
     let Some(target_fn) = target::by_name(&target_name) else {
@@ -124,6 +184,73 @@ fn main() -> ExitCode {
             report.seed,
             finding.iteration + 1
         );
+    }
+    ExitCode::SUCCESS
+}
+
+fn run_external(
+    program: String,
+    args: Vec<String>,
+    corpus_path: Option<String>,
+    artifact_path: String,
+    timeout_ms: u64,
+    iterations_set: bool,
+    config: Config,
+) -> ExitCode {
+    let seeds = match corpus_path {
+        Some(path) => match load_corpus(&path) {
+            Ok(seeds) if !seeds.is_empty() => seeds,
+            Ok(_) => return fail("the corpus directory contains no files"),
+            Err(error) => return fail(&format!("read corpus: {error}")),
+        },
+        None => vec![b"A".to_vec()],
+    };
+    let max_iterations = if iterations_set {
+        config.max_iterations
+    } else {
+        1_000
+    };
+    let target = ExternalTarget::new(&program)
+        .with_args(args)
+        .with_timeout(Duration::from_millis(timeout_ms));
+    let external_config = ExternalConfig {
+        seed: config.seed,
+        max_iterations,
+        stop_on_finding: config.stop_on_crash,
+        dictionary: config.dictionary,
+    };
+
+    println!("nutfuzz — deterministic external campaign\n");
+    println!("  program    {program}");
+    println!("  seed       {}", external_config.seed);
+    println!("  iterations {}", external_config.max_iterations);
+    println!("  timeout    {timeout_ms} ms");
+    println!("  corpus     {} seed(s)\n", seeds.len());
+
+    let report = fuzz_external(&target, &seeds, &external_config);
+    if let Some(error) = &report.harness_error {
+        return fail(&format!("external harness: {error}"));
+    }
+    println!("  {} executions", report.executions);
+    if report.findings.is_empty() {
+        println!("\n  no crashes or hangs found");
+        return ExitCode::SUCCESS;
+    }
+
+    println!("\n  {} unique finding(s):\n", report.findings.len());
+    for finding in &report.findings {
+        println!("    iteration {}", finding.iteration);
+        println!("    result    {:?}", finding.result);
+        println!("    input     {} bytes", finding.input.len());
+        println!(
+            "    minimised {} bytes  \"{}\"\n",
+            finding.minimised.len(),
+            render(&finding.minimised)
+        );
+    }
+    match write_artifacts(&artifact_path, &report) {
+        Ok(paths) => println!("  wrote {} artifact file(s) to {artifact_path}", paths.len()),
+        Err(error) => return fail(&format!("write artifacts: {error}")),
     }
     ExitCode::SUCCESS
 }
@@ -215,7 +342,8 @@ fn fail(message: &str) -> ExitCode {
     eprintln!(
         "usage: nutfuzz [--target NAME] [--mode blind|guided] [--seed N]\n\
          \x20              [--iterations N] [--dict a,b,c] [--keep-going]\n\
-         \x20              [--bench] [--list]"
+         \x20              [--external PROGRAM] [--arg VALUE] [--corpus DIR]\n\
+         \x20              [--timeout-ms N] [--artifacts DIR] [--bench] [--list]"
     );
     ExitCode::FAILURE
 }

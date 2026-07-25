@@ -10,18 +10,20 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust
         run: sudo apt-get update && sudo apt-get install -y cargo rustc
 
       - name: Build (warnings are failures)
-        run: |
-          cargo build --release 2>&1 | tee build.log
-          ! grep -q "^warning" build.log
+        env:
+          RUSTFLAGS: -Dwarnings
+        run: cargo build --release
 
       - name: Test
-        run: cargo test
+        env:
+          RUSTFLAGS: -Dwarnings
+        run: cargo test --release
 
       - name: It finds the planted bug
         run: |
@@ -34,3 +36,9 @@ jobs:
           out=$(cargo run --release --quiet -- --target parse_record_fixed --iterations 200000)
           echo "$out"
           echo "$out" | grep -q "no crashes found"
+
+      - name: External harness stays quiet on a clean program
+        run: |
+          out=$(cargo run --release --quiet -- --external /bin/true --iterations 20 --seed 42)
+          echo "$out"
+          echo "$out" | grep -q "no crashes or hangs found"

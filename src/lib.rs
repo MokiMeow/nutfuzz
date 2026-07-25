@@ -16,6 +16,7 @@ pub mod corpus;
 pub mod coverage;
 pub mod dictionary;
 pub mod exec;
+pub mod external;
 pub mod fuzzer;
 pub mod mutate;
 pub mod rng;
@@ -25,5 +26,9 @@ pub use corpus::Corpus;
 pub use coverage::{Coverage, GlobalMap};
 pub use dictionary::Dictionary;
 pub use fuzzer::{fuzz, minimise, Config, Finding, Mode, Report};
+pub use external::{
+    fuzz_external, load_corpus, minimise_external, write_artifacts, ExternalConfig,
+    ExternalFinding, ExternalReport,
+};
 pub use rng::Rng;
 pub use target::{Outcome, TargetFn};

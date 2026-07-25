@@ -20,7 +20,7 @@ const INTERESTING_32: [u32; 8] = [
     0x0000_ffff, 0x7fff_ffff, 0x8000_0000, 0xffff_ffff,
 ];
 
-const MAX_LEN: usize = 64 * 1024;
+pub(crate) const MAX_LEN: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mutation {
@@ -194,7 +194,7 @@ pub fn havoc(input: &mut Vec<u8>, other: &[u8], rng: &mut Rng) {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply, havoc, Mutation, ALL, MAX_LEN};
+    use super::{apply, havoc, ALL, MAX_LEN};
     use crate::rng::Rng;
 
     #[test]
@@ -228,7 +228,7 @@ mod tests {
     #[test]
     fn havoc_respects_the_length_cap() {
         let mut rng = Rng::new(4);
-        let mut input = vec![0x41; 1024];
+        let mut input = vec![0x41; MAX_LEN];
         for _ in 0..5000 {
             havoc(&mut input, b"abcd", &mut rng);
             assert!(input.len() <= MAX_LEN);
