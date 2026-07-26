@@ -6,12 +6,12 @@ and stays quiet on code with no bugs**.
 | # | Milestone | State |
 |---|-----------|-------|
 | 0 | [Mutation core](milestone-0-mutation-core.md) | ✅ done |
-| 1 | [Coverage feedback](milestone-1-coverage.md) | ⬜ |
-| 2 | [Corpus scheduling](milestone-2-scheduling.md) | ⬜ |
-| 3 | [External targets](milestone-3-external-targets.md) | ⬜ |
-| 4 | [Structure-aware input](milestone-4-structure.md) | ⬜ |
-| 5 | [A real bug](milestone-5-real-target.md) | ⬜ |
-| 6 | [Polish](milestone-6-polish.md) | ⬜ |
+| 1 | [Coverage feedback](milestone-1-coverage.md) | ✅ done |
+| 2 | [Corpus scheduling](milestone-2-scheduling.md) | ✅ done |
+| 3 | [External targets](milestone-3-external-targets.md) | ✅ done |
+| 4 | [Structure-aware input](milestone-4-structure.md) | ✅ done |
+| 5 | [A real bug](milestone-5-real-target.md) | ◐ harness built, campaign not run |
+| 6 | [Polish](milestone-6-polish.md) | ✅ done |
 
 ## Every milestone spec has
 

@@ -1,4 +1,4 @@
-# Milestone 1 — Coverage feedback
+# Milestone 1 — Coverage feedback ✅ (done)
 
 **Goal:** keep inputs that reach new code, so the fuzzer solves one condition at
 a time instead of needing to hit them all at once. This is the milestone that
@@ -11,24 +11,24 @@ set of interesting inputs.
 
 ## Tasks
 
-- [ ] **A harder target**: add `parse_nested` with a bug behind 3–4 nested
+- [x] **A harder target**: add `parse_nested` with a bug behind 3–4 nested
       conditions (magic bytes, then a version check, then a length check).
       Confirm the M0 blind fuzzer **cannot** find it in a large budget — that
       failure is the baseline this milestone must beat.
-- [ ] **Instrumentation**: record edges from the target. Start in-process for
+- [x] **Instrumentation**: record edges from the target. Start in-process for
       Rust targets (`-C instrument-coverage` or a trace-pc-guard callback);
       external binaries are milestone 3.
-- [ ] **Edge bitmap**: a fixed-size byte map indexed by
+- [x] **Edge bitmap**: a fixed-size byte map indexed by
       `cur_location ^ prev_location`, with `prev_location >>= 1`. Document why
       the XOR identifies an *edge* and why the shift avoids A→B/B→A collisions.
-- [ ] **Hit-count buckets** (1, 2, 3, 4–7, 8–15, 16–31, 32–127, 128+) so loop
+- [x] **Hit-count buckets** (1, 2, 3, 4–7, 8–15, 16–31, 32–127, 128+) so loop
       iteration counts don't flood the corpus.
-- [ ] **The feedback loop**: after each run, if any new edge or new bucket was
+- [x] **The feedback loop**: after each run, if any new edge or new bucket was
       hit, add the input to the corpus.
-- [ ] **Non-determinism detection**: run a new input twice; if the bitmaps
+- [x] **Non-determinism detection**: run a new input twice; if the bitmaps
       differ, flag it rather than letting it pollute the corpus forever.
-- [ ] **Collision metric**: report bitmap fill rate so collisions are visible.
-- [ ] **The measurement** (this *is* the milestone): executions-to-first-crash
+- [x] **Collision metric**: report bitmap fill rate so collisions are visible.
+- [x] **The measurement** (this *is* the milestone): executions-to-first-crash
       on the nested target, median of 10 seeds, blind vs coverage-guided.
 
 ## Files
@@ -38,17 +38,17 @@ set of interesting inputs.
 
 ## Definition of Done
 
-- [ ] The nested-condition bug is found by the coverage-guided fuzzer and
+- [x] The nested-condition bug is found by the coverage-guided fuzzer and
       **not** by the blind one within the same budget — asserted by a test.
-- [ ] A published table with real numbers:
+- [x] A published table with real numbers:
 
       | fuzzer | executions to first crash (median of 10 seeds) |
       |---|---|
 
-- [ ] The corpus demonstrably grows as new edges are found (assert it).
-- [ ] The false-positive test still passes on the fixed target.
-- [ ] Determinism still holds: same seed, same run.
-- [ ] Build warning-free; all earlier tests green.
+- [x] The corpus demonstrably grows as new edges are found (assert it).
+- [x] The false-positive test still passes on the fixed target.
+- [x] Determinism still holds: same seed, same run.
+- [x] Build warning-free; all earlier tests green.
 
 ## Notes
 

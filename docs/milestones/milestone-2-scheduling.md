@@ -1,4 +1,4 @@
-# Milestone 2 — Corpus scheduling
+# Milestone 2 — Corpus scheduling ✅ (done)
 
 **Goal:** spend fuzzing time where it pays. With a growing corpus, *which* input
 you mutate next matters as much as how you mutate it.
@@ -10,18 +10,18 @@ deduplication.
 
 ## Tasks
 
-- [ ] **Per-entry metadata**: execution time, input length, edges hit, times
+- [x] **Per-entry metadata**: execution time, input length, edges hit, times
       chosen, crashes produced.
-- [ ] **Energy assignment**: give more mutations to inputs that are fast, small,
+- [x] **Energy assignment**: give more mutations to inputs that are fast, small,
       and cover rare edges. Slow or bloated inputs waste the budget.
-- [ ] **Favoured set**: compute a minimal subset of the corpus covering every
+- [x] **Favoured set**: compute a minimal subset of the corpus covering every
       known edge (a greedy set cover) and prefer it — AFL's "favoured" concept.
-- [ ] **Corpus trimming**: shrink each entry to the smallest input preserving
+- [x] **Corpus trimming**: shrink each entry to the smallest input preserving
       its coverage. Smaller inputs execute faster and mutate more usefully.
-- [ ] **Crash deduplication**: group crashes by a stack/coverage signature, not
+- [x] **Crash deduplication**: group crashes by a stack/coverage signature, not
       by input bytes. One bug reached ten ways is one bug — reporting it as ten
       is how fuzzers drown users in noise.
-- [ ] **Stats output**: corpus size, favoured count, edges found, execs/sec,
+- [x] **Stats output**: corpus size, favoured count, edges found, execs/sec,
       unique crashes, updated as the campaign runs.
 
 ## Files
@@ -31,15 +31,15 @@ deduplication.
 
 ## Definition of Done
 
-- [ ] Scheduling beats round-robin selection on executions-to-first-crash
+- [x] Scheduling beats round-robin selection on executions-to-first-crash
       (measured, several seeds) — or the result is reported honestly if it does
       not, with an explanation.
-- [ ] Trimming reduces mean corpus entry size without losing edges (assert
+- [x] Trimming reduces mean corpus entry size without losing edges (assert
       coverage is preserved).
-- [ ] Ten different inputs triggering the same bug are reported as **one**
+- [x] Ten different inputs triggering the same bug are reported as **one**
       unique crash.
-- [ ] The false-positive and determinism tests still pass.
-- [ ] Build warning-free; all earlier tests green.
+- [x] The false-positive and determinism tests still pass.
+- [x] Build warning-free; all earlier tests green.
 
 ## Notes
 

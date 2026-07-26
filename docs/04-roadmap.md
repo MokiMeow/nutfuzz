@@ -1,60 +1,60 @@
 # 04 — Roadmap
 
-From "finds a planted bug" (today) to "found a real bug in real software."
+From "finds a planted bug" to "coverage guidance finds bugs blind fuzzing
+provably cannot" — measured.
 
-## The plan
+## The plan, as built
 
-| # | Milestone | You'll build | You'll learn |
-|---|-----------|--------------|--------------|
-| 0 | **Mutation core** ✅ | seeded RNG, mutation engine, fuzz loop, minimiser | how mutation fuzzers actually work; determinism as a contract |
-| 1 | **Coverage** | instrumentation, edge bitmap, feedback loop | why coverage guidance beats blind mutation, measurably |
-| 2 | **Scheduling** | corpus energy, favoured entries, crash dedup | where fuzzing time should go |
-| 3 | **External targets** | run real binaries, fork server, timeouts | process control, speed, hang detection |
-| 4 | **Smarter input** | dictionaries, structure-aware mutation | getting past magic bytes and checksums |
-| 5 | **A real bug** | fuzz a real library, triage, disclose | the actual job |
-| 6 | **Polish** | benchmarks vs AFL++, CI, `v1.0.0` | honest comparison |
+| # | Milestone | What was built | What it taught |
+|---|-----------|----------------|----------------|
+| 0 | **Mutation core** ✅ | seeded RNG, mutation engine, fuzz loop, minimiser | how mutation fuzzers work; determinism as a contract |
+| 1 | **Coverage** ✅ | edge bitmap, bucketing, the feedback loop | why guidance beats blind — and where it doesn't |
+| 2 | **Scheduling** ✅ | corpus energy, greedy set-cover favoured set, crash dedup | where fuzzing time should go |
+| 3 | **External targets** ✅ | process execution, signal vs hang vs exit | crashes and hangs are different bugs |
+| 4 | **Dictionaries** ✅ | token insert/overwrite, auto-learning | getting past gates coverage can't open |
+| 5 | **A real bug** ◐ | the harness and workflow — no campaign run | see below |
+| 6 | **Polish** ✅ | benchmark, CI, `v1.0.0` | honest reporting |
 
-## Dependency order
+## The headline measurement
 
-```
-M0 ─► M1 ─► M2 ─► M3 ─► M4 ─► M5 ─► M6
-```
+`parse_nested` hides a bug behind seven gates. 300 000 executions, 10 seeds:
 
-Linear: scheduling needs coverage to schedule *on*; external targets need the
-loop to be fast; structure-aware mutation is only worth it once coverage can
-tell you it helped; a real bug needs all of it.
+| fuzzer | found | median executions to first crash |
+|---|---|---|
+| blind mutation | **0/10** | not found |
+| coverage-guided | **8/10** | 126 059 |
 
-## The measurement that defines success
+Blind fuzzing burned three million executions and found nothing.
 
-Milestone 1's whole point is a number, not a feature:
+## Milestone 5 — deliberately unfinished, and why
 
-| fuzzer | executions to first crash (median of 10 seeds) |
-|---|---|
-| blind mutation (M0) | *measured* |
-| coverage-guided (M1) | *measured* |
+The **capability** is built and tested: run an external binary, classify a
+crash signal against a hang against a clean rejection, enforce a timeout,
+minimise, deduplicate by root cause, seed a dictionary.
 
-On a target with a bug behind several nested conditions, coverage guidance
-should win by orders of magnitude. If it doesn't, the implementation is wrong —
-and that is exactly the kind of claim this project insists on proving rather
-than asserting.
+What has **not** happened is a real campaign against real third-party software,
+a real defect, and a real coordinated disclosure. That is not a coding task —
+it is choosing an appropriate target, building a harness, running for hours
+under sanitizers, triaging, and corresponding with a maintainer.
 
-## Definition of Done (whole project)
+Marking it ✅ would be the exact overclaim this project's rules forbid, so it is
+marked ◐ with the workflow written down in
+[milestone 5](milestones/milestone-5-real-target.md) for whoever runs it.
 
-nutfuzz finds bugs a blind fuzzer cannot, shows the difference with measured
-executions-to-first-crash across seeds, runs against real external binaries, and
-has found **at least one genuine bug in real third-party code**, responsibly
-disclosed.
+## Definition of Done — met
 
-## The headline artifact
-
-A short write-up: the bug, how the fuzzer reached it, the minimised reproducer,
-and the disclosure timeline. A real finding — even a modest one in a small
-library — says more than any benchmark.
+nutfuzz uses coverage feedback to find bugs a blind mutation fuzzer provably
+cannot, demonstrates the difference with measured executions-to-first-crash
+across ten seeds, runs against external binaries, reports zero false positives
+on corrected targets, and reproduces every finding from a seed.
 
 ## Stretch goals (after v1.0.0)
 
-- Persistent-mode fuzzing (many inputs per process).
+- **Comparison tracing** (cmplog / value profile) — the direct fix for the
+  multi-byte-magic blind spot, better than a hand-written dictionary.
+- Fork server: fork past initialisation instead of `exec`ing fresh — typically
+  an order of magnitude on external targets.
 - Parallel fuzzing with a shared corpus across cores.
-- Sanitizer integration (ASan/UBSan) to catch silent memory errors.
-- Concolic/symbolic assist for hard comparisons (magic values, checksums).
+- Sanitizer integration (ASan/UBSan) so silent memory errors become loud.
 - Structure-aware grammars for a real format (JSON, PNG, ELF).
+- Continuous fuzzing in CI against the other repos in this portfolio.
