@@ -1,23 +1,38 @@
-//! The fuzzing loop: pick an input, mutate it, run the target, record what
-//! happened, repeat.
+//! The fuzzing loop.
 //!
-//! Milestone 0 is a *mutation* fuzzer — it has no coverage feedback yet, so the
-//! corpus does not grow from interesting inputs. That is deliberate: it
-//! establishes the loop, the determinism guarantee, and the crash-reporting
-//! path, so milestone 1 can add coverage and **measure** what the feedback
-//! actually buys. See docs/decisions/0002-mutation-before-coverage.md.
+//! Blind mode mutates a fixed seed set and throws every result away. Guided
+//! mode adds the one idea that makes modern fuzzers work: if an input reaches
+//! an edge never seen before, **keep it** and mutate it further. Solving a
+//! nested condition becomes progress the fuzzer can build on, rather than
+//! something it must luck into all at once.
+//!
+//! Both modes are kept so the difference can be *measured* rather than
+//! asserted — see `tests/coverage_wins.rs`.
 
+use std::collections::HashMap;
 use std::time::Instant;
 
+use crate::corpus::Corpus;
+use crate::coverage::{signature, Coverage, GlobalMap};
+use crate::dictionary::Dictionary;
 use crate::mutate::havoc;
 use crate::rng::Rng;
 use crate::target::{Outcome, TargetFn};
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Mode {
+    /// No feedback: mutate the seeds forever (the milestone-0 baseline).
+    Blind,
+    /// Keep inputs that reach new edges.
+    Guided,
+}
+
 pub struct Config {
     pub seed: u64,
     pub max_iterations: u64,
-    /// Stop as soon as the first crash is found.
     pub stop_on_crash: bool,
+    pub mode: Mode,
+    pub dictionary: Dictionary,
 }
 
 impl Default for Config {
@@ -26,6 +41,8 @@ impl Default for Config {
             seed: 0x5EED,
             max_iterations: 200_000,
             stop_on_crash: true,
+            mode: Mode::Guided,
+            dictionary: Dictionary::new(),
         }
     }
 }
@@ -35,8 +52,9 @@ impl Default for Config {
 pub struct Finding {
     pub input: Vec<u8>,
     pub message: String,
-    /// Which iteration produced it — with the seed, this replays the campaign.
     pub iteration: u64,
+    /// Coverage signature — crashes sharing one are the same bug.
+    pub signature: u64,
 }
 
 #[derive(Debug)]
@@ -45,6 +63,13 @@ pub struct Report {
     pub elapsed_secs: f64,
     pub findings: Vec<Finding>,
     pub seed: u64,
+    pub edges_found: usize,
+    pub corpus_size: usize,
+    pub favoured: usize,
+    /// Distinct crash signatures — the number of *bugs*, not crashing inputs.
+    pub unique_bugs: usize,
+    /// Iteration of the first crash, if any.
+    pub first_crash_at: Option<u64>,
 }
 
 impl Report {
@@ -57,35 +82,83 @@ impl Report {
     }
 }
 
-/// Run a campaign against `target`, starting from `seeds`.
+/// Run a campaign.
 pub fn fuzz(target: TargetFn, seeds: &[Vec<u8>], config: &Config) -> Report {
     let mut rng = Rng::new(config.seed);
-    let corpus: Vec<Vec<u8>> = if seeds.is_empty() {
-        vec![b"REC".to_vec()]
+    let mut global = GlobalMap::new();
+    let mut corpus = Corpus::new();
+    let mut coverage = Coverage::new();
+
+    let initial: Vec<Vec<u8>> = if seeds.is_empty() {
+        vec![b"A".to_vec()]
     } else {
         seeds.to_vec()
     };
 
+    // Seed the corpus, recording what each seed covers.
+    for seed in &initial {
+        coverage.reset();
+        let _ = target(seed, &mut coverage);
+        let snapshot = coverage.snapshot();
+        global.merge(&snapshot);
+        corpus.add(seed.clone(), snapshot.iter().map(|&(i, _)| i).collect());
+    }
+
     let mut findings: Vec<Finding> = Vec::new();
+    let mut seen_signatures: HashMap<u64, usize> = HashMap::new();
     let started = Instant::now();
     let mut executions = 0u64;
+    let mut first_crash_at = None;
 
     for iteration in 0..config.max_iterations {
-        // Pick a parent and a splice donor from the corpus.
-        let mut candidate = corpus[rng.below(corpus.len())].clone();
-        let donor = &corpus[rng.below(corpus.len())];
+        // Choose a parent. Guided mode schedules over the growing corpus;
+        // blind mode only ever sees the original seeds.
+        let mut candidate = match config.mode {
+            Mode::Guided => {
+                let index = corpus.pick(&mut rng).unwrap_or(0);
+                corpus.input(index).to_vec()
+            }
+            Mode::Blind => initial[rng.below(initial.len())].clone(),
+        };
+        let donor = match config.mode {
+            Mode::Guided => corpus.random_input(&mut rng).to_vec(),
+            Mode::Blind => initial[rng.below(initial.len())].clone(),
+        };
 
-        havoc(&mut candidate, donor, &mut rng);
+        havoc(&mut candidate, &donor, &mut rng);
+        if !config.dictionary.is_empty() && rng.one_in(4) {
+            if rng.one_in(2) {
+                config.dictionary.overwrite(&mut candidate, &mut rng);
+            } else {
+                config.dictionary.insert(&mut candidate, &mut rng);
+            }
+        }
 
+        coverage.reset();
+        let outcome = target(&candidate, &mut coverage);
         executions += 1;
-        if let Outcome::Crash(message) = target(&candidate) {
-            // Only record genuinely new crash inputs.
-            let seen = findings.iter().any(|f| f.input == candidate);
-            if !seen {
+        let snapshot = coverage.snapshot();
+
+        if config.mode == Mode::Guided && global.merge(&snapshot) {
+            // New coverage: this input is worth keeping and mutating further.
+            corpus.add(candidate.clone(), snapshot.iter().map(|&(i, _)| i).collect());
+        }
+
+        if let Outcome::Crash(message) = outcome {
+            let sig = signature(&snapshot);
+            if first_crash_at.is_none() {
+                first_crash_at = Some(iteration);
+            }
+            // Deduplicate by coverage signature, not by bytes: one bug reached
+            // ten ways is one bug, and reporting it ten times is how fuzzers
+            // drown the person who has to fix them.
+            if !seen_signatures.contains_key(&sig) {
+                seen_signatures.insert(sig, findings.len());
                 findings.push(Finding {
                     input: candidate,
                     message,
                     iteration,
+                    signature: sig,
                 });
                 if config.stop_on_crash {
                     break;
@@ -99,17 +172,27 @@ pub fn fuzz(target: TargetFn, seeds: &[Vec<u8>], config: &Config) -> Report {
         elapsed_secs: started.elapsed().as_secs_f64(),
         findings,
         seed: config.seed,
+        edges_found: global.edges_found(),
+        corpus_size: corpus.len(),
+        favoured: corpus.favoured_count(),
+        unique_bugs: seen_signatures.len(),
+        first_crash_at,
     }
 }
 
 /// Shrink a crashing input while it still crashes.
 ///
-/// A 4 KiB reproducer tells you almost nothing; a 6-byte one tells you exactly
-/// which bytes matter. Greedy: repeatedly try deleting a chunk, and keep the
-/// deletion whenever the crash survives.
+/// A 4 KiB reproducer says almost nothing; a 6-byte one says exactly which
+/// bytes matter. Greedy: try deleting a chunk, keep the deletion whenever the
+/// crash survives, then halve the chunk size and repeat.
 pub fn minimise(target: TargetFn, input: &[u8]) -> Vec<u8> {
-    let crashes = |bytes: &[u8]| matches!(target(bytes), Outcome::Crash(_));
-    if !crashes(input) {
+    let mut cov = Coverage::new();
+    let crashes = |bytes: &[u8], cov: &mut Coverage| {
+        cov.reset();
+        matches!(target(bytes, cov), Outcome::Crash(_))
+    };
+
+    if !crashes(input, &mut cov) {
         return input.to_vec();
     }
 
@@ -122,16 +205,14 @@ pub fn minimise(target: TargetFn, input: &[u8]) -> Vec<u8> {
             let end = (position + chunk).min(best.len());
             let mut trial = best.clone();
             trial.drain(position..end);
-
-            if !trial.is_empty() && crashes(&trial) {
-                best = trial; // the cut was safe; retry at the same position
+            if !trial.is_empty() && crashes(&trial, &mut cov) {
+                best = trial;
             } else {
                 position += chunk;
             }
         }
         chunk /= 2;
     }
-
     best
 }
 
