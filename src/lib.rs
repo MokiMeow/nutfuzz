@@ -21,6 +21,7 @@ pub mod fuzzer;
 pub mod mutate;
 pub mod rng;
 pub mod target;
+pub mod trim;
 
 pub use corpus::Corpus;
 pub use coverage::{Coverage, GlobalMap};

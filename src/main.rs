@@ -111,6 +111,18 @@ fn main() -> ExitCode {
                     _ => return fail("--progress needs a positive number"),
                 }
             }
+            "--stability-runs" => {
+                i += 1;
+                match args.get(i).and_then(|value| value.parse::<u8>().ok()) {
+                    Some(value) if value > 0 => config.stability_runs = value,
+                    _ => {
+                        return fail(
+                            "--stability-runs needs a positive number up to 255",
+                        )
+                    }
+                }
+            }
+            "--trim" => config.trim_corpus = true,
             "--seed" => {
                 i += 1;
                 match args.get(i).and_then(|v| v.parse().ok()) {
@@ -178,6 +190,11 @@ fn main() -> ExitCode {
             Schedule::RoundRobin => "round-robin",
         }
     );
+    println!("  stability  {} runs", config.stability_runs);
+    println!(
+        "  trimming   {}",
+        if config.trim_corpus { "enabled" } else { "disabled" }
+    );
     if !config.dictionary.is_empty() {
         println!("  dictionary {} token(s)", config.dictionary.len());
     }
@@ -205,6 +222,10 @@ fn main() -> ExitCode {
     println!(
         "  edges {}   corpus {} ({} favoured)   unique bugs {}",
         report.edges_found, report.corpus_size, report.favoured, report.unique_bugs
+    );
+    println!(
+        "  unstable {}   trimmed {} bytes",
+        report.stability.unstable_inputs, report.trimmed_bytes
     );
 
     if report.findings.is_empty() {

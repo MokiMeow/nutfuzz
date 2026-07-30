@@ -72,3 +72,26 @@ fn local_cli_reports_progress_and_schedule() {
     assert!(stderr.contains("progress execs=10"));
     assert!(stderr.contains("progress execs=20"));
 }
+
+#[test]
+fn local_cli_accepts_stability_and_trimming_options() {
+    let output = Command::new(env!("CARGO_BIN_EXE_nutfuzz"))
+        .args([
+            "--target",
+            "parse_nested_fixed",
+            "--iterations",
+            "1",
+            "--stability-runs",
+            "3",
+            "--trim",
+        ])
+        .output()
+        .expect("run local campaign");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("stability  3 runs"));
+    assert!(stdout.contains("trimming   enabled"));
+    assert!(stdout.contains("unstable"));
+    assert!(stdout.contains("trimmed"));
+}

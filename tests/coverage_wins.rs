@@ -10,6 +10,18 @@
 
 use nutfuzz::fuzzer::{fuzz, fuzz_with_progress, Config, Mode, Schedule};
 use nutfuzz::target;
+use nutfuzz::{Coverage, Outcome};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static UNSTABLE_FLIP: AtomicBool = AtomicBool::new(false);
+
+fn unstable_target(_input: &[u8], coverage: &mut Coverage) -> Outcome {
+    coverage.trace(1);
+    if UNSTABLE_FLIP.fetch_xor(true, Ordering::SeqCst) {
+        coverage.trace(2);
+    }
+    Outcome::Ok
+}
 
 fn seeds() -> Vec<Vec<u8>> {
     vec![b"AAAAAAAA".to_vec()]
@@ -51,6 +63,7 @@ fn progress_reports_fixed_execution_intervals() {
     let config = Config {
         max_iterations: 25,
         progress_interval: 10,
+        stability_runs: 1,
         ..Config::default()
     };
     let mut executions = Vec::new();
@@ -62,6 +75,22 @@ fn progress_reports_fixed_execution_intervals() {
     );
     assert_eq!(report.executions, 25);
     assert_eq!(executions, vec![10, 20]);
+}
+
+#[test]
+fn unstable_coverage_is_reported_and_not_admitted() {
+    UNSTABLE_FLIP.store(false, Ordering::SeqCst);
+    let report = fuzz(
+        unstable_target,
+        &[b"seed".to_vec()],
+        &Config {
+            max_iterations: 1,
+            stability_runs: 2,
+            ..Config::default()
+        },
+    );
+    assert_eq!(report.stability.unstable_inputs, 1);
+    assert_eq!(report.corpus_size, 1);
 }
 
 #[test]
@@ -210,9 +239,8 @@ fn a_dictionary_opens_a_gate_coverage_alone_cannot() {
             max_iterations: budget,
             stop_on_crash: true,
             mode: Mode::Guided,
-            schedule: Schedule::Weighted,
-            progress_interval: 0,
             dictionary: Dictionary::from_tokens(["FUZZ"]),
+            ..Config::default()
         },
     );
     assert!(

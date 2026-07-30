@@ -18,6 +18,7 @@ use crate::dictionary::Dictionary;
 use crate::mutate::havoc;
 use crate::rng::Rng;
 use crate::target::{Outcome, TargetFn};
+use crate::trim::trim_coverage;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -40,6 +41,8 @@ pub struct Config {
     pub mode: Mode,
     pub schedule: Schedule,
     pub progress_interval: u64,
+    pub stability_runs: u8,
+    pub trim_corpus: bool,
     pub dictionary: Dictionary,
 }
 
@@ -52,6 +55,8 @@ impl Default for Config {
             mode: Mode::Guided,
             schedule: Schedule::Weighted,
             progress_interval: 0,
+            stability_runs: 2,
+            trim_corpus: false,
             dictionary: Dictionary::new(),
         }
     }
@@ -80,6 +85,14 @@ pub struct Report {
     pub unique_bugs: usize,
     /// Iteration of the first crash, if any.
     pub first_crash_at: Option<u64>,
+    pub stability: Stability,
+    pub trimmed_bytes: usize,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Stability {
+    pub checks: u64,
+    pub unstable_inputs: u64,
 }
 
 impl Report {
@@ -141,6 +154,8 @@ where
     let started = Instant::now();
     let mut executions = 0u64;
     let mut first_crash_at = None;
+    let mut stability = Stability::default();
+    let mut trimmed_bytes = 0usize;
 
     for iteration in 0..config.max_iterations {
         // Choose a parent. Guided mode schedules over the growing corpus;
@@ -175,9 +190,39 @@ where
         executions += 1;
         let snapshot = coverage.snapshot();
 
-        if config.mode == Mode::Guided && global.merge(&snapshot) {
-            // New coverage: this input is worth keeping and mutating further.
-            corpus.add(candidate.clone(), snapshot.iter().map(|&(i, _)| i).collect());
+        if config.mode == Mode::Guided && global.would_be_interesting(&snapshot) {
+            stability.checks += 1;
+            let mut stable = true;
+            for _ in 1..config.stability_runs.max(1) {
+                coverage.reset();
+                let _ = target(&candidate, &mut coverage);
+                executions += 1;
+                if coverage.snapshot() != snapshot {
+                    stable = false;
+                    break;
+                }
+            }
+            if stable {
+                let mut admitted = candidate.clone();
+                if config.trim_corpus {
+                    let original_len = admitted.len();
+                    let mut trim_coverage_map = Coverage::new();
+                    admitted = trim_coverage(&admitted, |trial| {
+                        trim_coverage_map.reset();
+                        let _ = target(trial, &mut trim_coverage_map);
+                        executions += 1;
+                        trim_coverage_map.snapshot() == snapshot
+                    });
+                    trimmed_bytes += original_len - admitted.len();
+                }
+                global.merge(&snapshot);
+                corpus.add(
+                    admitted,
+                    snapshot.iter().map(|&(index, _)| index).collect(),
+                );
+            } else {
+                stability.unstable_inputs += 1;
+            }
         }
 
         if let Outcome::Crash(message) = outcome {
@@ -226,6 +271,8 @@ where
         favoured: corpus.favoured_count(),
         unique_bugs: seen_signatures.len(),
         first_crash_at,
+        stability,
+        trimmed_bytes,
     }
 }
 

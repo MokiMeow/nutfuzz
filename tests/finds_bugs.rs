@@ -23,6 +23,7 @@ fn config(seed: u64, iterations: u64, stop: bool) -> Config {
         max_iterations: iterations,
         stop_on_crash: stop,
         mode: Mode::Guided,
+        stability_runs: 1,
         ..Config::default()
     }
 }
