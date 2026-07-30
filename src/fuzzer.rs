@@ -17,6 +17,9 @@ use crate::coverage::{signature, Coverage, GlobalMap};
 use crate::dictionary::Dictionary;
 use crate::mutate::havoc;
 use crate::rng::Rng;
+use crate::structure::{
+    generate, harvest_tokens, mutate_token, FixupFn, Grammar,
+};
 use crate::target::{Outcome, TargetFn};
 use crate::trim::trim_coverage;
 
@@ -43,6 +46,9 @@ pub struct Config {
     pub progress_interval: u64,
     pub stability_runs: u8,
     pub trim_corpus: bool,
+    pub auto_dictionary: bool,
+    pub grammar: Option<Grammar>,
+    pub fixup: Option<FixupFn>,
     pub dictionary: Dictionary,
 }
 
@@ -57,6 +63,9 @@ impl Default for Config {
             progress_interval: 0,
             stability_runs: 2,
             trim_corpus: false,
+            auto_dictionary: false,
+            grammar: None,
+            fixup: None,
             dictionary: Dictionary::new(),
         }
     }
@@ -133,6 +142,7 @@ where
     let mut global = GlobalMap::new();
     let mut corpus = Corpus::new();
     let mut coverage = Coverage::new();
+    let mut dictionary = config.dictionary.clone();
 
     let initial: Vec<Vec<u8>> = if seeds.is_empty() {
         vec![b"A".to_vec()]
@@ -176,13 +186,22 @@ where
             Mode::Blind => initial[rng.below(initial.len())].clone(),
         };
 
-        havoc(&mut candidate, &donor, &mut rng);
-        if !config.dictionary.is_empty() && rng.one_in(4) {
-            if rng.one_in(2) {
-                config.dictionary.overwrite(&mut candidate, &mut rng);
+        if config.grammar.is_some() && rng.one_in(8) {
+            candidate = generate(config.grammar.expect("grammar exists"), &mut rng);
+        } else {
+            havoc(&mut candidate, &donor, &mut rng);
+        }
+        if !dictionary.is_empty() && rng.one_in(4) {
+            if rng.one_in(3) {
+                mutate_token(&mut candidate, &dictionary, &mut rng);
+            } else if rng.one_in(2) {
+                dictionary.overwrite(&mut candidate, &mut rng);
             } else {
-                config.dictionary.insert(&mut candidate, &mut rng);
+                dictionary.insert(&mut candidate, &mut rng);
             }
+        }
+        if let Some(fixup) = config.fixup {
+            fixup(&mut candidate);
         }
 
         coverage.reset();
@@ -208,12 +227,24 @@ where
                     let original_len = admitted.len();
                     let mut trim_coverage_map = Coverage::new();
                     admitted = trim_coverage(&admitted, |trial| {
+                        let mut trial = trial.to_vec();
+                        if let Some(fixup) = config.fixup {
+                            fixup(&mut trial);
+                        }
                         trim_coverage_map.reset();
-                        let _ = target(trial, &mut trim_coverage_map);
+                        let _ = target(&trial, &mut trim_coverage_map);
                         executions += 1;
                         trim_coverage_map.snapshot() == snapshot
                     });
+                    if let Some(fixup) = config.fixup {
+                        fixup(&mut admitted);
+                    }
                     trimmed_bytes += original_len - admitted.len();
+                }
+                if config.auto_dictionary {
+                    for token in harvest_tokens(&admitted) {
+                        dictionary.learn(token);
+                    }
                 }
                 global.merge(&snapshot);
                 corpus.add(

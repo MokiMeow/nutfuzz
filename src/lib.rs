@@ -20,6 +20,7 @@ pub mod external;
 pub mod fuzzer;
 pub mod mutate;
 pub mod rng;
+pub mod structure;
 pub mod target;
 pub mod trim;
 

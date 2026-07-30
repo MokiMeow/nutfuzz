@@ -18,6 +18,7 @@ use nutfuzz::fuzzer::{
 use nutfuzz::{
     fuzz_external, load_corpus, target, write_artifacts, Dictionary, ExternalConfig,
 };
+use nutfuzz::structure::Grammar;
 
 fn main() -> ExitCode {
     let mut config = Config::default();
@@ -28,6 +29,7 @@ fn main() -> ExitCode {
     let mut artifact_path = String::from("crashes");
     let mut timeout_ms = 1_000;
     let mut iterations_set = false;
+    let mut fixup_name = None;
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -123,6 +125,24 @@ fn main() -> ExitCode {
                 }
             }
             "--trim" => config.trim_corpus = true,
+            "--auto-dict" => config.auto_dictionary = true,
+            "--grammar" => {
+                i += 1;
+                match args.get(i).map(String::as_str) {
+                    Some("json") => config.grammar = Some(Grammar::Json),
+                    _ => return fail("--grammar needs 'json'"),
+                }
+            }
+            "--fixup" => {
+                i += 1;
+                match args.get(i).map(String::as_str) {
+                    Some("checksum") => {
+                        config.fixup = Some(target::fixup_checksum);
+                        fixup_name = Some("checksum");
+                    }
+                    _ => return fail("--fixup needs 'checksum'"),
+                }
+            }
             "--seed" => {
                 i += 1;
                 match args.get(i).and_then(|v| v.parse().ok()) {
@@ -195,6 +215,21 @@ fn main() -> ExitCode {
         "  trimming   {}",
         if config.trim_corpus { "enabled" } else { "disabled" }
     );
+    println!(
+        "  auto dict  {}",
+        if config.auto_dictionary { "enabled" } else { "disabled" }
+    );
+    if let Some(grammar) = config.grammar {
+        println!(
+            "  grammar    {}",
+            match grammar {
+                Grammar::Json => "json",
+            }
+        );
+    }
+    if let Some(name) = fixup_name {
+        println!("  fixup      {name}");
+    }
     if !config.dictionary.is_empty() {
         println!("  dictionary {} token(s)", config.dictionary.len());
     }

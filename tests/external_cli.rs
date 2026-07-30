@@ -95,3 +95,27 @@ fn local_cli_accepts_stability_and_trimming_options() {
     assert!(stdout.contains("unstable"));
     assert!(stdout.contains("trimmed"));
 }
+
+#[test]
+fn local_cli_accepts_structured_mutation_options() {
+    let output = Command::new(env!("CARGO_BIN_EXE_nutfuzz"))
+        .args([
+            "--target",
+            "parse_checksum",
+            "--iterations",
+            "1",
+            "--auto-dict",
+            "--grammar",
+            "json",
+            "--fixup",
+            "checksum",
+        ])
+        .output()
+        .expect("run structured campaign");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("auto dict  enabled"));
+    assert!(stdout.contains("grammar    json"));
+    assert!(stdout.contains("fixup      checksum"));
+}

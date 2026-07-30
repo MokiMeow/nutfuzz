@@ -10,7 +10,7 @@
 
 use nutfuzz::fuzzer::{fuzz, fuzz_with_progress, Config, Mode, Schedule};
 use nutfuzz::target;
-use nutfuzz::{Coverage, Outcome};
+use nutfuzz::{Coverage, Dictionary, Outcome};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static UNSTABLE_FLIP: AtomicBool = AtomicBool::new(false);
@@ -246,5 +246,35 @@ fn a_dictionary_opens_a_gate_coverage_alone_cannot() {
     assert!(
         !with.findings.is_empty(),
         "with the magic value in a dictionary the gate should fall"
+    );
+}
+
+#[test]
+fn checksum_fixup_opens_a_gate_that_mutation_alone_cannot() {
+    let budget = 2_000;
+    let base = Config {
+        seed: 41,
+        max_iterations: budget,
+        dictionary: Dictionary::from_tokens(["CHECK"]),
+        stability_runs: 1,
+        ..Config::default()
+    };
+    let without = fuzz(target::parse_checksum, &[b"seed\0".to_vec()], &base);
+    assert!(
+        without.findings.is_empty(),
+        "the checksum gate should reject ordinary mutations"
+    );
+
+    let with = fuzz(
+        target::parse_checksum,
+        &[b"seed\0".to_vec()],
+        &Config {
+            fixup: Some(target::fixup_checksum),
+            ..base
+        },
+    );
+    assert!(
+        !with.findings.is_empty(),
+        "recomputing the checksum should make the structured gate reachable"
     );
 }

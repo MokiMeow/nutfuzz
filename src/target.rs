@@ -199,6 +199,42 @@ pub fn parse_nested_fixed(data: &[u8], cov: &mut Coverage) -> Outcome {
     Outcome::Ok
 }
 
+// -------------------------------------------------------------- checksum ---
+
+pub fn fixup_checksum(data: &mut Vec<u8>) {
+    if data.is_empty() {
+        data.push(0);
+        return;
+    }
+    let checksum = data[..data.len() - 1]
+        .iter()
+        .fold(0u8, |sum, byte| sum.wrapping_add(*byte));
+    let last = data.len() - 1;
+    data[last] = checksum;
+}
+
+pub fn parse_checksum(data: &[u8], cov: &mut Coverage) -> Outcome {
+    cov.trace(50);
+    if data.len() < 6 {
+        cov.trace(51);
+        return Outcome::Ok;
+    }
+    let expected = data[..data.len() - 1]
+        .iter()
+        .fold(0u8, |sum, byte| sum.wrapping_add(*byte));
+    if data[data.len() - 1] != expected {
+        cov.trace(52);
+        return Outcome::Ok;
+    }
+    cov.trace(53);
+    if &data[..5] == b"CHECK" {
+        cov.trace(54);
+        return Outcome::Crash("checksum-gated structured input accepted".into());
+    }
+    cov.trace(55);
+    Outcome::Ok
+}
+
 // ------------------------------------------------------------------ misc ---
 
 pub fn by_name(name: &str) -> Option<TargetFn> {
@@ -208,16 +244,18 @@ pub fn by_name(name: &str) -> Option<TargetFn> {
         "parse_nested" => Some(parse_nested),
         "parse_nested_fixed" => Some(parse_nested_fixed),
         "parse_magic" => Some(parse_magic),
+        "parse_checksum" => Some(parse_checksum),
         _ => None,
     }
 }
 
-pub const NAMES: [&str; 5] = [
+pub const NAMES: [&str; 6] = [
     "parse_record",
     "parse_record_fixed",
     "parse_nested",
     "parse_nested_fixed",
     "parse_magic",
+    "parse_checksum",
 ];
 
 #[cfg(test)]

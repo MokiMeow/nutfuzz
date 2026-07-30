@@ -38,6 +38,10 @@ impl Dictionary {
         self.tokens.len()
     }
 
+    pub(crate) fn tokens(&self) -> &[Vec<u8>] {
+        &self.tokens
+    }
+
     /// Learn a token seen in the target's input checks.
     ///
     /// Real fuzzers harvest these automatically from comparison instructions
