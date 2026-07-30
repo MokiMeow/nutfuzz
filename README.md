@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Rust-2021-orange" alt="Rust 2021">
   <img src="https://img.shields.io/badge/dependencies-none-brightgreen" alt="No dependencies">
   <img src="https://img.shields.io/badge/tests-82%20passing-brightgreen" alt="82 passing tests">
-  <img src="https://img.shields.io/badge/release-v1.2.0-blue" alt="v1.2.0">
+  <img src="https://img.shields.io/badge/release-v1.2.1-blue" alt="v1.2.1">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT">
 </p>
 
