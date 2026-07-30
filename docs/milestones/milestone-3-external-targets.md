@@ -1,68 +1,61 @@
-# Milestone 3 — External targets ✅ (core done)
+# Milestone 3: External targets (complete)
 
-**Goal:** be able to fuzz real programs, not just in-process functions — which
-means process control and telling a crash apart from a hang.
+**Goal:** fuzz programs outside the NutFuzz process while distinguishing a
+crash, hang, clean rejection, and broken harness.
 
 ## What shipped
 
-- [x] **Run a binary** — `ExternalTarget` spawns a process, feeds the input on
-      stdin, and classifies how it ended.
-- [x] **Correct classification**, which is the part that matters:
-  - **Crash** — killed by SIGSEGV / SIGABRT / SIGFPE / SIGILL / SIGBUS.
-  - **Hang** — exceeded its timeout. A separate finding class that still needs
-    triage to rule out intentional long work.
-  - **Exited** — ran to completion. A non-zero status is a program correctly
-    *rejecting* bad input, not a finding.
-  - **HarnessError** — the binary is missing or could not be spawned. A broken
-    harness must never look like a bug.
-- [x] **Timeouts** — a target past its budget is killed and recorded as a hang.
-- [x] **Campaign CLI** — `--external`, sorted `--corpus`, repeatable `--arg`,
-      timeout, seed, iteration, dictionary, and artifact options.
-- [x] **Minimised artifacts** — deterministic `.bin` reproducers plus metadata;
-      crashes preserve their signal and hangs preserve timeout behavior.
-- [x] **Robust stdin and cleanup** — file-backed input cannot deadlock before
-      timeout, and Unix timeouts terminate the target process group.
-- [x] Tests that force each case: `/bin/true`, `/bin/false`, an infinite `sh`
-      loop (must be a hang, not a crash), `kill -SEGV $$` (must be a crash), and
-      a nonexistent binary (must be a harness error).
+- [x] `ExternalTarget` runs a binary with file-backed stdin and classifies its
+      result.
+- [x] Fatal Unix signals are findings, timeouts are hangs, normal and nonzero
+      exits are target behavior, and spawn failures are harness errors.
+- [x] Unix timeouts terminate the complete target process group.
+- [x] Deterministic external campaigns support sorted seed corpora, repeated
+      arguments, dictionaries, minimisation, deduplication, and private stable
+      artifacts.
+- [x] Linux `setrlimit` controls cap address space, CPU time, and file size,
+      while core dumps are disabled.
+- [x] A bounded version 1 local forkserver protocol returns run status and
+      coverage from the repository-owned synthetic harness.
+- [x] The forkserver parent initializes once, forks a worker per input, closes
+      unused descriptors, uses `_exit` in the child, and recovers after a
+      timed-out worker by restarting its process group.
+- [x] `Executor` separates campaign logic from exec-per-run and persistent
+      targets without changing the reference external API.
 
-## Not done
+## Verified behavior
 
-- [ ] **Resource limits (`setrlimit`)** — a runaway target should be capped so
-      it cannot exhaust host memory. Requires libc bindings or raw syscalls,
-      which conflicts with the zero-dependency rule; needs a small `unsafe`
-      syscall wrapper. Not implemented, so **do not point this at an
-      allocation-happy target unsupervised.**
-- [ ] **Fork server** — forking a target already past initialisation instead of
-      `exec`ing fresh each time is AFL's headline speed trick (typically ~10×).
-      Not implemented; external-target throughput is `exec`-bound.
-- [ ] **Coverage from external binaries** — the in-process path records edges;
-      an external process needs a shared memory map plus compile-time
-      instrumentation of the target. Not implemented, so external targets
-      currently fuzz **blind**.
-- [x] **Crash artefacts on disk** (`crashes/` with signal + minimised copy).
-- [ ] **A campaign against a real external binary.** The execution layer is
-      unit-tested; no real program has been fuzzed through it.
+- `/bin/true` is clean and `/bin/false` is a non-finding rejection.
+- `kill -SEGV $$` is a crash and an infinite shell loop is a hang.
+- A missing executable is a harness error.
+- A 1,024-byte file-size limit prevents an owned helper from growing its output
+  past 1,024 bytes.
+- Repeated forkserver requests return deterministic coverage.
+- Truncated, oversized, and wrong-version protocol frames are rejected.
+- A forkserver timeout is reported as a hang and the next request succeeds.
+- The 1,000-run local comparison measured 0.238 seconds through the forkserver
+  versus 1.862 seconds for fresh `/bin/true` processes, a 7.82x speedup on the
+  test host.
+
+## Scope boundary
+
+Arbitrary external binaries do not automatically provide edge coverage. They
+remain on the safe exec-per-run path unless explicitly adapted to the
+cooperative protocol or built with a future instrumentation layer. No
+third-party campaign was run.
 
 ## Definition of Done
 
-- [x] Signals are correctly classified; an infinite loop is a **hang**, not a
-      crash.
-- [x] A missing binary is a harness error, not a finding.
+- [x] Signals, hangs, exits, and harness failures are classified correctly.
 - [x] Large unread inputs cannot bypass the timeout.
-- [x] The external campaign is seed-reproducible, stays quiet on `/bin/true`,
-      minimises a test signal, and writes stable artifact names.
+- [x] Resource controls are enforced and tested on Linux.
+- [x] External campaigns replay from their seed and write stable private
+      artifacts.
+- [x] The local persistent executor returns coverage and recovers from timeout.
+- [x] Its local speedup is measured without claiming a universal result.
 - [x] Build warning-free; all earlier tests green.
-- [ ] ~~Fuzzes a real external binary and finds its bug~~ — the capability is
-      built and tested, the campaign has not been run. See
-      [milestone 5](milestone-5-real-target.md).
-- [ ] ~~Fork-server speedup measured~~ — not implemented.
+- A genuine authorized third-party campaign and disclosure remains outside the
+  safe local engineering authorization; see
+  [milestone 5](milestone-5-real-target.md).
 
-## Notes
-
-Only fuzz software you own or are authorised to test. From here the tool can
-point at third-party code, so §8 of [AGENTS.md](../../AGENTS.md) applies:
-findings go through coordinated disclosure, and reproducers for unfixed
-third-party bugs stay out of this repository.
-
-**Next:** [Milestone 4 — Structure-aware input](milestone-4-structure.md).
+**Next:** [Milestone 4: Structure-aware input](milestone-4-structure.md).

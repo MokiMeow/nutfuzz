@@ -4,7 +4,42 @@ All notable changes to nutfuzz are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0] — 2026-07-25
+## [1.2.0]: 2026-07-30
+
+### Added
+
+- Weighted and round-robin scheduling modes, live progress callbacks, and CLI
+  progress reporting.
+- Coverage stability checks and coverage-preserving corpus trimming.
+- Automatic printable-token learning, token-aware mutation, a small JSON
+  grammar, and post-mutation fixup hooks.
+- An owned checksum-gated target with tests proving the fixup is necessary.
+- Linux address-space, CPU, file-size, and core-dump resource controls.
+- A bounded versioned local forkserver protocol, a reusable client, an owned
+  synthetic harness, deterministic coverage replies, and timeout recovery.
+- An opt-in AFL++ comparison script and authentic local campaign recording.
+- A complete architecture, requirements, limitations, testing, and responsible
+  use guide in the README.
+
+### Measured
+
+- Round-robin reached the planted `parse_nested` finding at iteration 198,674
+  for seed `12648430`; weighted scheduling reached it at 287,266. Both found
+  the same 17 edges. This is one reproducible comparison, not a universal
+  scheduler claim.
+- The local forkserver completed 1,000 owned-target executions in 0.238 seconds
+  versus 1.862 seconds for fresh `/bin/true` processes, a 7.82x local speedup.
+- The optional AFL++ comparison reported `SKIP` because AFL++ is not installed
+  in the prepared environment; no package was downloaded or installed.
+
+### Safety
+
+- All new execution tests use repository-owned synthetic targets or benign
+  system programs such as `/bin/true`.
+- The third-party campaign and disclosure milestone remains intentionally
+  excluded because no external target authorization was supplied.
+
+## [1.1.0]: 2026-07-25
 
 ### Added
 - A deterministic external-campaign API and CLI with sorted corpus loading,
@@ -32,22 +67,22 @@ to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   remains explicitly pending until an authorised campaign and real disclosure
   provide evidence.
 
-## [1.0.0] — 2026-07-25
+## [1.0.0]: 2026-07-25
 
 Coverage-guided fuzzing that provably finds bugs blind mutation cannot.
 
 ### Added
-- Milestone 1: **edge coverage feedback** — an AFL-style bitmap indexed by
+- Milestone 1: **edge coverage feedback**: an AFL-style bitmap indexed by
   `hash(block) ^ prev`, hit-count bucketing, and a corpus that grows whenever an
   input reaches a new edge.
-- Milestone 2: **corpus scheduling** — per-entry energy weighted by size and
+- Milestone 2: **corpus scheduling**: per-entry energy weighted by size and
   usage, a greedy set-cover "favoured" subset that still covers every known
   edge, and **crash deduplication by coverage signature** so one bug reached ten
   ways is reported once.
-- Milestone 3: **external targets** — run a real binary, classify a fatal signal
+- Milestone 3: **external targets**: run a real binary, classify a fatal signal
   (SIGSEGV/SIGABRT/SIGFPE/SIGILL/SIGBUS) as a crash, a timeout as a **hang**, and
   a non-zero exit as a program correctly rejecting input.
-- Milestone 4: **dictionaries** — token insertion and overwrite, plus
+- Milestone 4: **dictionaries**: token insertion and overwrite, plus
   auto-learning, to open gates coverage feedback cannot.
 - Milestone 6: a `--bench` mode comparing blind and guided across ten seeds,
   `--mode`/`--dict` flags, and CI gating on build, tests, and both the
@@ -81,5 +116,5 @@ Coverage-guided fuzzing that provably finds bugs blind mutation cannot.
   marked ◐ rather than ✅.
 - No fork server yet, so external-target throughput is `exec`-bound.
 
-## [0.1.0] — milestone 0
+## [0.1.0]: milestone 0
 - First working version: a deterministic mutation fuzzer with minimisation.

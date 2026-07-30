@@ -18,12 +18,19 @@ jobs:
       - name: Build (warnings are failures)
         env:
           RUSTFLAGS: -Dwarnings
-        run: cargo build --release
+        run: cargo build --release --all-targets
 
       - name: Test
         env:
           RUSTFLAGS: -Dwarnings
-        run: cargo test --release
+        run: cargo test --release --all-targets
+
+      - name: Markdown punctuation policy
+        run: |
+          if grep -RIl --include='*.md' $'\u2014' .; then
+            echo 'first-party Markdown must not contain em dash characters'
+            exit 1
+          fi
 
       - name: It finds the planted bug
         run: |
@@ -42,3 +49,14 @@ jobs:
           out=$(cargo run --release --quiet -- --external /bin/true --iterations 20 --seed 42)
           echo "$out"
           echo "$out" | grep -q "no crashes or hangs found"
+
+      - name: Structured fixup reaches its owned target
+        run: |
+          out=$(cargo run --release --quiet -- \
+            --target parse_checksum --dict CHECK --fixup checksum \
+            --seed 41 --iterations 2000)
+          echo "$out"
+          echo "$out" | grep -q "checksum-gated structured input accepted"
+
+      - name: Optional AFL++ owned-target comparison
+        run: ./scripts/benchmark-aflpp.sh

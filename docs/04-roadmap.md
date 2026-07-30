@@ -1,68 +1,66 @@
-# 04 — Roadmap
+# Roadmap
 
-From "finds a planted bug" to "coverage guidance finds bugs blind fuzzing
-provably cannot" — measured.
+NutFuzz's safe local engine is complete. The remaining campaign milestone
+requires explicit authorization for a named third-party target and is not
+treated as missing engine code.
 
-## The plan, as built
+## Milestones
 
-| # | Milestone | What was built | What it taught |
-|---|-----------|----------------|----------------|
-| 0 | **Mutation core** ✅ | seeded RNG, mutation engine, fuzz loop, minimiser | how mutation fuzzers work; determinism as a contract |
-| 1 | **Coverage** ✅ | edge bitmap, bucketing, the feedback loop | why guidance beats blind — and where it doesn't |
-| 2 | **Scheduling** ✅ | corpus energy, greedy set-cover favoured set, crash dedup | where fuzzing time should go |
-| 3 | **External targets** ✅ | deterministic CLI campaigns, process-tree timeout, minimised artifacts | crashes and hangs are different bugs |
-| 4 | **Dictionaries** ✅ | token insert/overwrite, auto-learning | getting past gates coverage can't open |
-| 5 | **A real bug** ◐ | the harness and workflow — no campaign run | see below |
-| 6 | **Polish** ✅ | benchmark, CI, `v1.0.0` | honest reporting |
+| # | Milestone | Status | Evidence |
+|---|---|---|---|
+| 0 | Mutation core | Complete | deterministic mutation, replay, minimisation |
+| 1 | Coverage feedback | Complete | guided 8/10, blind 0/10 |
+| 2 | Scheduling | Complete | weighted and round-robin, progress, trimming |
+| 3 | External execution | Complete | classification, limits, artifacts, local forkserver |
+| 4 | Structured input | Complete | dictionaries, learned tokens, JSON, checksum fixups |
+| 5 | Authorized real target | Excluded | no named target authorization or campaign |
+| 6 | Polish | Complete | 82 tests, CI, benchmarks, demo, documentation |
 
-## The headline measurement
+## Headline coverage result
 
-`parse_nested` hides a bug behind seven gates. 300 000 executions, 10 seeds:
+`parse_nested` hides a planted bug behind seven gates. Across ten seeds and a
+300,000-execution budget:
 
-| fuzzer | found | median executions to first crash |
-|---|---|---|
-| blind mutation | **0/10** | not found |
-| coverage-guided | **8/10** | 126 059 |
+| Fuzzer | Found | Median executions |
+|---|---:|---:|
+| Blind mutation | 0/10 | Not found |
+| Coverage-guided | 8/10 | 126,059 |
 
-Blind fuzzing burned three million executions and found nothing.
+This test remains the core proof that the feedback loop contributes real search
+power rather than merely existing in the source tree.
 
-## Milestone 5 — deliberately unfinished, and why
+## v1.2.0 completion work
 
-The **capability** is built and tested: run an external binary, classify a
-crash signal against a hang against a clean rejection, enforce a timeout,
-minimise, deduplicate by root cause, seed a dictionary.
+- Stability reruns prevent changing coverage from polluting the corpus.
+- Coverage-preserving trimming reduces admitted inputs.
+- Weighted and round-robin policies are selectable and measured honestly.
+- Progress callbacks expose live campaign state.
+- Automatic tokens, token mutation, JSON generation, and checksum fixups cover
+  normal structured-input gaps.
+- Linux resource limits constrain external target damage.
+- The repository-owned persistent harness returns deterministic coverage and
+  measured 7.82x faster than the local fresh-process comparison.
+- The AFL++ script is bounded and local-only; it reports `SKIP` when tools are
+  unavailable.
+- All first-party Markdown is free of em dash characters.
 
-What has **not** happened is a real campaign against real third-party software,
-a real defect, and a real coordinated disclosure. That is not a coding task —
-it is choosing an appropriate target, building a harness, running for hours
-under sanitizers, triaging, and corresponding with a maintainer.
+## Deliberately excluded milestone
 
-Marking it ✅ would be the exact overclaim this project's rules forbid, so it is
-marked ◐ with the workflow written down in
-[milestone 5](milestones/milestone-5-real-target.md) for whoever runs it.
+No third-party software was fuzzed. No vulnerability, disclosure, or maintainer
+response is claimed. Milestone 5 remains a documented workflow because running
+it requires:
 
-The July 2026 audit intentionally did not launch one: the owner requested
-normal safe engineering work only. The external runner itself was completed
-and regression-tested without targeting third-party software.
+1. a named target the operator is authorized to test;
+2. a target-specific harness and sanitizer build;
+3. a bounded campaign and manual triage;
+4. private coordinated disclosure if a genuine issue is found.
 
-## Engineering capability — met; whole-project DoD still pending
+See [milestone 5](milestones/milestone-5-real-target.md) and
+[disclosure guidance](10-disclosure.md).
 
-nutfuzz uses coverage feedback to find bugs a blind mutation fuzzer provably
-cannot, demonstrates the difference with measured executions-to-first-crash
-across ten seeds, runs against external binaries, reports zero false positives
-on corrected targets, and reproduces every finding from a seed.
+## Optional future work
 
-The original whole-project Definition of Done in `AGENTS.md` additionally
-requires a genuine authorised third-party finding and responsible disclosure.
-That remains unmet with milestone 5 and is not implied by the completed engine.
-
-## Stretch goals (after v1.0.0)
-
-- **Comparison tracing** (cmplog / value profile) — the direct fix for the
-  multi-byte-magic blind spot, better than a hand-written dictionary.
-- Fork server: fork past initialisation instead of `exec`ing fresh — typically
-  an order of magnitude on external targets.
-- Parallel fuzzing with a shared corpus across cores.
-- Sanitizer integration (ASan/UBSan) so silent memory errors become loud.
-- Structure-aware grammars for a real format (JSON, PNG, ELF).
-- Continuous fuzzing in CI against the other repos in this portfolio.
+- Compiler-assisted comparison tracing.
+- General external coverage instrumentation.
+- Parallel workers with corpus synchronization.
+- Sanitizer integration and richer format grammars.

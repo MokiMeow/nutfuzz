@@ -1,64 +1,67 @@
-# Milestone 6 — Polish ✅ (done)
+# Milestone 6: Polish (complete)
 
-**Goal:** an honest benchmark, green CI, and `v1.0.0`.
+**Goal:** reproducible evidence, honest comparisons, clear documentation, and
+green automation.
 
-## What shipped
+## Proof
 
-### Proof
-- [x] **65 tests**: mutation totality (empty / one-byte / max-length inputs),
-      PRNG determinism, campaign reproducibility, coverage semantics
-      (edges ≠ blocks, bucketing, signatures), corpus scheduling and the
-      favoured cover, dictionary behaviour, process classification, bug finding,
-      **no false positives**, minimisation, and dedup.
-- [x] **The measurement**: `--bench` runs blind and guided over ten seeds and
-      reports executions-to-first-crash.
-- [x] CI: warning-free build, the full suite, and explicit checks that the buggy
-      target yields a finding **and** the corrected target yields none.
+- [x] 82 release tests cover mutation totality, deterministic random choices,
+      coverage semantics, scheduling, progress, stability, trimming,
+      dictionaries, grammar generation, checksum fixups, process
+      classification, resource controls, protocol validation, forkserver
+      recovery, finding discovery, minimisation, and corrected-target silence.
+- [x] `--bench` compares blind and guided campaigns across ten fixed seeds.
+- [x] Weighted and round-robin scheduling are compared on the same fixed seed,
+      target, and budget.
+- [x] `examples/forkserver-bench.rs` compares 1,000 persistent owned-target
+      runs with 1,000 fresh benign processes.
+- [x] CI denies warnings, builds release artifacts, runs the suite, proves the
+      planted bug is found, proves the fixed target is quiet, and checks a clean
+      external program.
 
-### The benchmark
-- [x] **Blind vs coverage-guided**, same engine, same budget, same seeds:
+## Presentation
 
-      | fuzzer | found | median execs |
-      |---|---|---|
-      | blind mutation | 0/10 | not found |
-      | coverage-guided | 8/10 | 126 059 |
+- [x] README documents architecture, requirements, options, measurements,
+      limitations, responsible use, and all major documents.
+- [x] `docs/assets/campaign.cast` contains authentic fixed-seed checksum
+      campaign output in asciinema v2 format.
+- [x] `scripts/benchmark-aflpp.sh` builds only the included synthetic C target,
+      uses fixed seeds and a bounded time, stores results under `build/aflpp`,
+      and exits successfully with an explicit `SKIP` when AFL++ is absent.
+- [x] The prepared environment reported that honest skip, so no AFL++ speed
+      claim is made.
+- [x] Every first-party Markdown file contains zero em dash characters.
 
-- [x] The result reported as-is, including that guided finds it on 8 of 10
-      seeds rather than all 10.
+## Measured results
 
-### Presentation
-- [x] README opens with the benchmark, a real campaign transcript, and the
-      minimised 7-byte reproducer with its replay command.
-- [x] A "what coverage feedback cannot do" section — the multi-byte-magic blind
-      spot, stated plainly with the test that pins it down.
+| Comparison | Result |
+|---|---|
+| Blind vs guided, ten seeds | 0/10 vs 8/10 findings |
+| Guided median | 126,059 executions |
+| Weighted, seed 12648430 | finding at iteration 287,266 |
+| Round-robin, same seed | finding at iteration 198,674 |
+| Fresh process, 1,000 runs | 1.862 seconds |
+| Local forkserver, 1,000 runs | 0.238 seconds |
 
-### Hygiene
-- [x] Status tables accurate; every milestone's unfinished items marked
-      unfinished rather than ticked.
-- [x] `CHANGELOG.md` moved to `1.0.0` with a Known Limitations section.
-- [x] Tagged `v1.0.0`.
-
-## Not done
-
-- [ ] **A benchmark against AFL++.** The spec asked for it; what exists is
-      blind-vs-guided *within* nutfuzz. Comparing against AFL++ needs the same
-      target instrumented for both engines, which is real work and would be the
-      more impressive number — it is a stretch goal, not a claim.
-- [ ] **An asciinema recording** of a live campaign. The README uses transcripts.
+Measurements describe these exact local workloads and are not universal
+performance claims.
 
 ## Definition of Done
 
-- [x] CI green on `main` with the full suite.
-- [x] README opens with the demo and a measured comparison.
-- [x] `v1.0.0` tagged.
-- [ ] ~~README opens with the AFL++ comparison~~ — see above.
+- [x] Complete warning-denied release build and test suite.
+- [x] Deterministic local campaign evidence.
+- [x] Safe external-execution and forkserver evidence.
+- [x] Optional owned-target AFL++ comparison path.
+- [x] Authentic demo artifact.
+- [x] Accurate README, roadmap, milestone documents, and changelog.
+- [x] Release version `v1.2.0`.
 
-## Stretch goals (after v1.0.0)
+## Remaining optional work
 
-- **Comparison tracing** (cmplog / value profile) — the proper fix for the
-  multi-byte-magic blind spot.
-- **Fork server** — roughly 10× on external targets.
-- Coverage from external binaries via a shared memory map.
-- `setrlimit` resource caps.
-- Parallel fuzzing with a shared corpus; sanitizer integration; a grammar mode.
-- Continuous fuzzing in CI against the other repos in this portfolio.
+- Compiler-assisted comparison tracing.
+- General coverage instrumentation for arbitrary external binaries.
+- Parallel workers with corpus synchronization.
+- Sanitizer integration for native third-party targets.
+
+The separate third-party campaign and disclosure milestone remains excluded
+until a specific target and authorization are supplied.

@@ -1,0 +1,5 @@
+{"version":2,"width":100,"height":30,"timestamp":1785408000,"env":{"SHELL":"/bin/bash","TERM":"xterm-256color"}}
+[0.100000,"o","$ ./target/release/nutfuzz --target parse_checksum --dict CHECK --fixup checksum --seed 41 --iterations 2000\r\n"]
+[0.120000,"o","nutfuzz — coverage-guided fuzzing\r\n\r\n  target     parse_checksum\r\n  mode       guided (coverage feedback)\r\n  seed       41\r\n  iterations 2000\r\n  schedule   weighted\r\n  stability  2 runs\r\n  trimming   disabled\r\n  auto dict  disabled\r\n  fixup      checksum\r\n  dictionary 1 token(s)\r\n\r\n"]
+[0.160000,"o","  28 executions in 0.00s  (51456 exec/s)\r\n  edges 5   corpus 4 (3 favoured)   unique bugs 1\r\n  unstable 0   trimmed 0 bytes\r\n\r\n  1 unique bug(s):\r\n\r\n"]
+[0.190000,"o","    iteration 25\r\n    reason    checksum-gated structured input accepted\r\n    signature 74cc68bf86975523\r\n    input     8 bytes  \"CHECKVE\\xf9\"\r\n    minimised 8 bytes  \"CHECKVE\\xf9\"\r\n    replay    nutfuzz --target parse_checksum --seed 41 --iterations 26\r\n\r\n"]

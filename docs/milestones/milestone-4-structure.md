@@ -1,56 +1,55 @@
-# Milestone 4 — Structure-aware input ✅ (dictionaries done)
+# Milestone 4: Structure-aware input (complete)
 
-**Goal:** get past gates that stop byte-level mutation cold — magic numbers and
-keywords.
+**Goal:** cross format gates that byte-level mutation and coverage feedback
+cannot solve alone.
 
 ## Why this milestone exists
 
-Milestone 1 established the limit precisely: a single multi-byte comparison
-gives coverage feedback **no partial credit**, so a guided fuzzer stalls exactly
-like a blind one. A dictionary turns that impossible gate into one mutation.
+One opaque multi-byte comparison provides no partial coverage credit. A
+dictionary turns a known magic value into one mutation. Token boundaries,
+grammars, and checksum repair extend that idea to structured inputs.
 
 ## What shipped
 
-- [x] **Dictionaries** — a token list with two mutations: *overwrite* bytes at a
-      random offset with a token, and *insert* one without removing anything.
-      A token longer than the input is prepended rather than skipped.
-- [x] **CLI integration** — `--dict FUZZ,REC` seeds the dictionary; roughly one
-      mutation round in four applies a token.
-- [x] **`Dictionary::learn`** — adds a token at runtime, ignoring empties,
-      over-long tokens and duplicates so the dictionary cannot grow unbounded.
-- [x] **The measurement that justifies it** — on `parse_magic` (a 4-byte
-      `memcmp` gate):
-      - guided fuzzing **fails** to open it in 150 000 executions,
-      - the same campaign **with** `"FUZZ"` in the dictionary opens it.
-      Both directions are asserted, so the test would fail if either the
-      limitation or the fix stopped being real.
+- [x] Bounded dictionary learning rejects empty, duplicate, and overlong
+      tokens.
+- [x] Dictionary insertion and overwrite never exceed the 64 KiB input cap.
+- [x] `--dict FUZZ,REC` provides manual tokens.
+- [x] Automatic harvesting learns unique printable runs of 4 through 32 bytes
+      from stable coverage-increasing inputs.
+- [x] Token-aware replacement preserves surrounding lexical delimiters.
+- [x] `--grammar json` adds a small balanced JSON-object generator as a
+      campaign mutation strategy.
+- [x] Post-mutation `FixupFn` hooks run before target execution and during
+      coverage-preserving trim trials.
+- [x] The owned `parse_checksum` target requires a valid wrapping checksum and
+      the structured `CHECK` token.
 
-## Not done
+## Verified behavior
 
-- [ ] **Auto-dictionary harvesting.** `learn()` exists but nothing calls it
-      automatically — collecting constants seen in comparisons needs the target's
-      comparison instructions intercepted (libFuzzer's value profile, AFL's
-      cmplog). That is the *proper* fix for the multi-byte-magic blind spot and
-      is listed as the top stretch goal.
-- [ ] **Token-aware mutation for text formats** (mutating at token boundaries).
-- [ ] **A grammar mode** for a real format.
-- [ ] **Checksum handling / fixup hook** — a target that rejects everything
-      failing a CRC admits nothing at all. The fixes are patching out the check
-      or recomputing it after mutation; neither is implemented.
+- Coverage guidance fails to open the opaque `FUZZ` gate within 150,000
+  executions without a dictionary and opens it with the same budget and token.
+- Token harvesting is unique and bounded.
+- Token replacement changes `true` to `false` without damaging the surrounding
+  JSON punctuation.
+- 1,000 generated JSON values have balanced objects and quotes.
+- The checksum campaign remains quiet without a fixup and reaches its planted
+  finding with `fixup_checksum`.
 
 ## Definition of Done
 
-- [x] A target gated behind a 4-byte magic is opened **with** a dictionary and
-      demonstrably not without — asserted in both directions.
-- [x] The dictionary refuses junk and duplicates.
-- [x] The false-positive and determinism tests still pass.
+- [x] A multi-byte magic gate is opened with a dictionary and demonstrably not
+      without it.
+- [x] Automatic token harvesting is bounded and tested.
+- [x] Token-aware mutation and JSON generation preserve their basic structure.
+- [x] A checksum-gated target is reachable only with its tested fixup.
+- [x] False-positive and determinism tests remain green.
 - [x] Build warning-free; all earlier tests green.
-- [ ] ~~Auto-dictionary harvests a constant~~ — not implemented.
-- [ ] ~~A checksum-gated target is reachable~~ — not implemented.
 
-## Notes
+## Limitation
 
-This is where fuzzing stops being "throw bytes" and becomes "speak the format
-badly on purpose", which is what finds bugs in real parsers.
+Harvesting printable runs is not compiler-assisted comparison tracing. Cmplog
+or value profiling would reveal constants that never appear in successful
+inputs and remains a worthwhile future improvement.
 
-**Next:** [Milestone 5 — A real bug](milestone-5-real-target.md).
+**Next:** [Milestone 5: A real bug](milestone-5-real-target.md).

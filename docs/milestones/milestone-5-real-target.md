@@ -1,67 +1,56 @@
-# Milestone 5 — A real bug
+# Milestone 5: Authorized third-party campaign (excluded)
 
-**Goal:** point nutfuzz at real third-party software and find a genuine bug —
-then handle it properly. This is the milestone that matters.
+**Status:** intentionally not executed.
 
-## Concepts
+This milestone is operational security work, not unfinished normal engine
+implementation. The user authorized safe local engineering and explicitly
+excluded major cyber activity. No named third-party target or written
+authorization was supplied, so NutFuzz did not launch a campaign, claim a
+vulnerability, contact a maintainer, or publish a reproducer.
 
-Target selection, harness writing, sanitizers, triage, and coordinated
-disclosure.
+## Entry conditions
 
-## Tasks
+A future operator may begin this milestone only after all of the following are
+true:
 
-- [ ] **Choose a target you are allowed to fuzz.** Good candidates: a small,
-      actively maintained open-source C/C++ parsing library (image, archive,
-      config, or serialisation format). Check for an existing security policy
-      (`SECURITY.md`) and whether it is already in OSS-Fuzz — a target already
-      fuzzed for years is a poor first choice.
-- [ ] **Write a harness**: the smallest program that feeds bytes to one entry
-      point. Small harness, deep coverage.
-- [ ] **Build with sanitizers** (ASan + UBSan). Many real memory bugs are silent
-      without them — the program happily continues past an overflow. A crash
-      under ASan is a real finding a plain run would miss.
-- [ ] **Seed corpus**: gather valid sample files; a good corpus is worth more
-      than a clever mutator.
-- [ ] **Run a long campaign**, then triage: deduplicate by root cause, minimise
-      each reproducer, and read the code to understand *why* it crashes.
-- [ ] **Assess impact honestly** — a null-dereference in a parser is a
-      robustness bug, not a critical vulnerability. Do not inflate it.
-- [ ] **Disclose responsibly**: private report to the maintainer with a
-      minimised reproducer and analysis, agree a timeline, publish after a fix.
+1. The exact target and version are named.
+2. The operator owns the target or has explicit permission to fuzz it.
+3. The target's security policy and reporting channel are documented.
+4. CPU, memory, file, time, storage, and network boundaries are agreed.
+5. The campaign environment is isolated from production systems and data.
 
-## Files
+## Authorized workflow
 
-`harnesses/`, `corpus/` (seed inputs), `findings/` (write-ups **only for
-already-public, fixed issues**), `docs/10-disclosure.md`.
+Once the entry conditions are satisfied:
 
-## Definition of Done
+1. Build the smallest target-specific harness.
+2. Compile with appropriate sanitizers and debug symbols.
+3. Assemble a minimal valid seed corpus.
+4. Run a bounded local campaign within the agreed limits.
+5. Reproduce, deduplicate, minimize, and manually triage every candidate.
+6. Assess impact without inflating severity.
+7. Report a genuine issue privately through the documented channel.
+8. Publish technical details only after the issue is fixed or already public.
 
-- [ ] A genuine, reproducible defect found in third-party code, with a minimised
-      reproducer and an explanation of the root cause.
-- [ ] Reported privately to the maintainers, following their security policy.
-- [ ] A write-up published **only once the issue is fixed or public** — covering
-      the bug, how the fuzzer reached it, and the disclosure timeline.
-- [ ] Earlier tests all still green.
+## Evidence required for completion
 
-## Ethics — not optional
+- Written target authorization.
+- Exact source revision and build command.
+- Harness and seed-corpus provenance.
+- Sanitizer and campaign configuration.
+- Stable minimized reproducer for a genuine defect.
+- Evidence that corrected code no longer reproduces it.
+- Private report and maintainer coordination record.
+- Public write-up only when disclosure is appropriate.
 
-- Fuzz only software you own or are authorised to test.
-- **Never commit a reproducer for an unfixed third-party bug to this public
-  repository.** Keep it private until the issue is public.
-- No weaponised exploits. The contribution is the search technique and the
-  responsible report.
-- If a maintainer asks for more time, give it.
+None of this evidence exists in this repository, so the milestone remains
+excluded rather than falsely marked complete.
 
-Finding a bug is the easy half; handling it well is what makes it worth putting
-your name on.
+## Safe work completed around it
 
-## Audit status — 2026-07-25
+The engine supports deterministic external campaigns, private artifacts,
+process-tree timeout cleanup, Linux resource limits, result classification,
+minimisation, and a repository-owned local forkserver. All external tests use
+synthetic targets or benign system programs.
 
-The external campaign runner, deterministic corpus loading, minimisation, and
-private artifact path are implemented and tested. The owner explicitly limited
-this audit to normal safe engineering work, so no third-party fuzzing or
-vulnerability workflow was launched. None of the Definition of Done items
-above are claimed; [the disclosure workflow](../10-disclosure.md) records the
-requirements for a future authorised campaign.
-
-**Next:** [Milestone 6 — Polish](milestone-6-polish.md).
+See [safe campaign and disclosure](../10-disclosure.md).
