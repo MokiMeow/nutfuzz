@@ -49,3 +49,26 @@ fn zero_timeout_is_rejected_before_running_any_target() {
     let stderr = String::from_utf8(output.stderr).expect("UTF-8 error");
     assert!(stderr.contains("--timeout-ms needs a positive number"));
 }
+
+#[test]
+fn local_cli_reports_progress_and_schedule() {
+    let output = Command::new(env!("CARGO_BIN_EXE_nutfuzz"))
+        .args([
+            "--target",
+            "parse_nested_fixed",
+            "--iterations",
+            "25",
+            "--schedule",
+            "round-robin",
+            "--progress",
+            "10",
+        ])
+        .output()
+        .expect("run nutfuzz");
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("UTF-8 output");
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 error");
+    assert!(stdout.contains("schedule   round-robin"));
+    assert!(stderr.contains("progress execs=10"));
+    assert!(stderr.contains("progress execs=20"));
+}

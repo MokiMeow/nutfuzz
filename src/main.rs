@@ -12,7 +12,9 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use nutfuzz::exec::ExternalTarget;
-use nutfuzz::fuzzer::{fuzz, minimise, render, Config, Mode};
+use nutfuzz::fuzzer::{
+    fuzz, fuzz_with_progress, minimise, render, Config, Mode, Schedule,
+};
 use nutfuzz::{
     fuzz_external, load_corpus, target, write_artifacts, Dictionary, ExternalConfig,
 };
@@ -86,6 +88,29 @@ fn main() -> ExitCode {
                     _ => return fail("--mode needs 'blind' or 'guided'"),
                 }
             }
+            "--schedule" => {
+                i += 1;
+                match args.get(i).map(String::as_str) {
+                    Some("weighted") => config.schedule = Schedule::Weighted,
+                    Some("round-robin") => {
+                        config.schedule = Schedule::RoundRobin
+                    }
+                    _ => {
+                        return fail(
+                            "--schedule needs 'weighted' or 'round-robin'",
+                        )
+                    }
+                }
+            }
+            "--progress" => {
+                i += 1;
+                match args.get(i).and_then(|value| value.parse::<u64>().ok()) {
+                    Some(value) if value > 0 => {
+                        config.progress_interval = value
+                    }
+                    _ => return fail("--progress needs a positive number"),
+                }
+            }
             "--seed" => {
                 i += 1;
                 match args.get(i).and_then(|v| v.parse().ok()) {
@@ -146,13 +171,30 @@ fn main() -> ExitCode {
     });
     println!("  seed       {}", config.seed);
     println!("  iterations {}", config.max_iterations);
+    println!(
+        "  schedule   {}",
+        match config.schedule {
+            Schedule::Weighted => "weighted",
+            Schedule::RoundRobin => "round-robin",
+        }
+    );
     if !config.dictionary.is_empty() {
         println!("  dictionary {} token(s)", config.dictionary.len());
     }
     println!();
 
     let seeds = default_seeds(&target_name);
-    let report = fuzz(target_fn, &seeds, &config);
+    let report = fuzz_with_progress(target_fn, &seeds, &config, |progress| {
+        eprintln!(
+            "progress execs={} edges={} corpus={} favoured={} bugs={} elapsed={:.2}s",
+            progress.executions,
+            progress.edges_found,
+            progress.corpus_size,
+            progress.favoured,
+            progress.unique_bugs,
+            progress.elapsed_secs
+        );
+    });
 
     println!(
         "  {} executions in {:.2}s  ({:.0} exec/s)",

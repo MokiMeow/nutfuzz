@@ -27,11 +27,19 @@ pub enum Mode {
     Guided,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Schedule {
+    Weighted,
+    RoundRobin,
+}
+
 pub struct Config {
     pub seed: u64,
     pub max_iterations: u64,
     pub stop_on_crash: bool,
     pub mode: Mode,
+    pub schedule: Schedule,
+    pub progress_interval: u64,
     pub dictionary: Dictionary,
 }
 
@@ -42,6 +50,8 @@ impl Default for Config {
             max_iterations: 200_000,
             stop_on_crash: true,
             mode: Mode::Guided,
+            schedule: Schedule::Weighted,
+            progress_interval: 0,
             dictionary: Dictionary::new(),
         }
     }
@@ -82,8 +92,30 @@ impl Report {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Progress {
+    pub executions: u64,
+    pub corpus_size: usize,
+    pub favoured: usize,
+    pub edges_found: usize,
+    pub unique_bugs: usize,
+    pub elapsed_secs: f64,
+}
+
 /// Run a campaign.
 pub fn fuzz(target: TargetFn, seeds: &[Vec<u8>], config: &Config) -> Report {
+    fuzz_with_progress(target, seeds, config, |_| {})
+}
+
+pub fn fuzz_with_progress<F>(
+    target: TargetFn,
+    seeds: &[Vec<u8>],
+    config: &Config,
+    mut on_progress: F,
+) -> Report
+where
+    F: FnMut(&Progress),
+{
     let mut rng = Rng::new(config.seed);
     let mut global = GlobalMap::new();
     let mut corpus = Corpus::new();
@@ -115,7 +147,11 @@ pub fn fuzz(target: TargetFn, seeds: &[Vec<u8>], config: &Config) -> Report {
         // blind mode only ever sees the original seeds.
         let mut candidate = match config.mode {
             Mode::Guided => {
-                let index = corpus.pick(&mut rng).unwrap_or(0);
+                let index = match config.schedule {
+                    Schedule::Weighted => corpus.pick(&mut rng),
+                    Schedule::RoundRobin => corpus.pick_round_robin(),
+                }
+                .unwrap_or(0);
                 corpus.input(index).to_vec()
             }
             Mode::Blind => initial[rng.below(initial.len())].clone(),
@@ -164,6 +200,19 @@ pub fn fuzz(target: TargetFn, seeds: &[Vec<u8>], config: &Config) -> Report {
                     break;
                 }
             }
+        }
+
+        if config.progress_interval > 0
+            && executions % config.progress_interval == 0
+        {
+            on_progress(&Progress {
+                executions,
+                corpus_size: corpus.len(),
+                favoured: corpus.favoured_count(),
+                edges_found: global.edges_found(),
+                unique_bugs: seen_signatures.len(),
+                elapsed_secs: started.elapsed().as_secs_f64(),
+            });
         }
     }
 

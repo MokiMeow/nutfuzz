@@ -8,7 +8,7 @@
 //! If these tests ever fail, the feedback loop is broken — most likely edges
 //! are not being recorded, or the corpus is not actually growing.
 
-use nutfuzz::fuzzer::{fuzz, Config, Mode};
+use nutfuzz::fuzzer::{fuzz, fuzz_with_progress, Config, Mode, Schedule};
 use nutfuzz::target;
 
 fn seeds() -> Vec<Vec<u8>> {
@@ -27,6 +27,41 @@ fn run(mode: Mode, seed: u64, iterations: u64) -> nutfuzz::Report {
             ..Config::default()
         },
     )
+}
+
+#[test]
+fn round_robin_schedule_is_reproducible() {
+    let config = Config {
+        seed: 99,
+        max_iterations: 20_000,
+        stop_on_crash: false,
+        mode: Mode::Guided,
+        schedule: Schedule::RoundRobin,
+        ..Config::default()
+    };
+    let first = fuzz(target::parse_nested, &seeds(), &config);
+    let second = fuzz(target::parse_nested, &seeds(), &config);
+    assert_eq!(first.edges_found, second.edges_found);
+    assert_eq!(first.corpus_size, second.corpus_size);
+    assert_eq!(first.first_crash_at, second.first_crash_at);
+}
+
+#[test]
+fn progress_reports_fixed_execution_intervals() {
+    let config = Config {
+        max_iterations: 25,
+        progress_interval: 10,
+        ..Config::default()
+    };
+    let mut executions = Vec::new();
+    let report = fuzz_with_progress(
+        target::parse_nested_fixed,
+        &seeds(),
+        &config,
+        |progress| executions.push(progress.executions),
+    );
+    assert_eq!(report.executions, 25);
+    assert_eq!(executions, vec![10, 20]);
 }
 
 #[test]
@@ -175,6 +210,8 @@ fn a_dictionary_opens_a_gate_coverage_alone_cannot() {
             max_iterations: budget,
             stop_on_crash: true,
             mode: Mode::Guided,
+            schedule: Schedule::Weighted,
+            progress_interval: 0,
             dictionary: Dictionary::from_tokens(["FUZZ"]),
         },
     );

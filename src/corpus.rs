@@ -55,6 +55,7 @@ impl Entry {
 #[derive(Default)]
 pub struct Corpus {
     entries: Vec<Entry>,
+    round_robin: usize,
 }
 
 impl Corpus {
@@ -135,6 +136,17 @@ impl Corpus {
         Some(self.entries.len() - 1)
     }
 
+    pub fn pick_round_robin(&mut self) -> Option<usize> {
+        if self.entries.is_empty() {
+            return None;
+        }
+        let index = self.round_robin % self.entries.len();
+        self.round_robin = (index + 1) % self.entries.len();
+        self.entries[index].picked =
+            self.entries[index].picked.saturating_add(1);
+        Some(index)
+    }
+
     pub fn input(&self, index: usize) -> &[u8] {
         &self.entries[index].input
     }
@@ -209,5 +221,21 @@ mod tests {
         let mut corpus = Corpus::new();
         let mut rng = Rng::new(1);
         assert!(corpus.pick(&mut rng).is_none());
+    }
+
+    #[test]
+    fn round_robin_visits_every_entry_in_order() {
+        let mut corpus = Corpus::new();
+        corpus.add(b"a".to_vec(), vec![1]);
+        corpus.add(b"b".to_vec(), vec![2]);
+        corpus.add(b"c".to_vec(), vec![3]);
+
+        let picks = [
+            corpus.pick_round_robin(),
+            corpus.pick_round_robin(),
+            corpus.pick_round_robin(),
+            corpus.pick_round_robin(),
+        ];
+        assert_eq!(picks, [Some(0), Some(1), Some(2), Some(0)]);
     }
 }
