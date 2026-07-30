@@ -18,6 +18,7 @@ pub mod dictionary;
 pub mod exec;
 pub mod external;
 pub mod fuzzer;
+pub mod limits;
 pub mod mutate;
 pub mod rng;
 pub mod structure;
@@ -28,6 +29,7 @@ pub use corpus::Corpus;
 pub use coverage::{Coverage, GlobalMap};
 pub use dictionary::Dictionary;
 pub use fuzzer::{fuzz, minimise, Config, Finding, Mode, Report};
+pub use limits::ResourceLimits;
 pub use external::{
     fuzz_external, load_corpus, minimise_external, write_artifacts, ExternalConfig,
     ExternalFinding, ExternalReport,

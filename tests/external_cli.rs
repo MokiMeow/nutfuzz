@@ -22,6 +22,32 @@ fn clean_external_program_completes_without_a_finding() {
     assert!(stdout.contains("no crashes or hangs found"));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn external_cli_applies_resource_limits() {
+    let output = Command::new(env!("CARGO_BIN_EXE_nutfuzz"))
+        .args([
+            "--external",
+            "/bin/true",
+            "--iterations",
+            "1",
+            "--memory-mb",
+            "64",
+            "--cpu-seconds",
+            "1",
+            "--file-size-bytes",
+            "1024",
+        ])
+        .output()
+        .expect("run constrained target");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("memory     64 MiB"));
+    assert!(stdout.contains("cpu        1 s"));
+    assert!(stdout.contains("file size  1024 bytes"));
+}
+
 #[cfg(unix)]
 #[test]
 fn missing_external_program_is_a_harness_failure_not_a_finding() {

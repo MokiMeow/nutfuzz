@@ -17,6 +17,7 @@ use nutfuzz::fuzzer::{
 };
 use nutfuzz::{
     fuzz_external, load_corpus, target, write_artifacts, Dictionary, ExternalConfig,
+    ResourceLimits,
 };
 use nutfuzz::structure::Grammar;
 
@@ -30,6 +31,7 @@ fn main() -> ExitCode {
     let mut timeout_ms = 1_000;
     let mut iterations_set = false;
     let mut fixup_name = None;
+    let mut resource_limits = ResourceLimits::default();
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -80,6 +82,41 @@ fn main() -> ExitCode {
                 match args.get(i).and_then(|value| value.parse::<u64>().ok()) {
                     Some(value) if value > 0 => timeout_ms = value,
                     _ => return fail("--timeout-ms needs a positive number"),
+                }
+            }
+            "--memory-mb" => {
+                i += 1;
+                match args.get(i).and_then(|value| value.parse::<u64>().ok()) {
+                    Some(value) if value > 0 => {
+                        resource_limits.address_space_bytes =
+                            value.checked_mul(1024 * 1024);
+                        if resource_limits.address_space_bytes.is_none() {
+                            return fail("--memory-mb is too large");
+                        }
+                    }
+                    _ => return fail("--memory-mb needs a positive number"),
+                }
+            }
+            "--cpu-seconds" => {
+                i += 1;
+                match args.get(i).and_then(|value| value.parse::<u64>().ok()) {
+                    Some(value) if value > 0 => {
+                        resource_limits.cpu_seconds = Some(value)
+                    }
+                    _ => return fail("--cpu-seconds needs a positive number"),
+                }
+            }
+            "--file-size-bytes" => {
+                i += 1;
+                match args.get(i).and_then(|value| value.parse::<u64>().ok()) {
+                    Some(value) if value > 0 => {
+                        resource_limits.file_size_bytes = Some(value)
+                    }
+                    _ => {
+                        return fail(
+                            "--file-size-bytes needs a positive number",
+                        )
+                    }
                 }
             }
             "--mode" => {
@@ -185,6 +222,7 @@ fn main() -> ExitCode {
             timeout_ms,
             iterations_set,
             config,
+            resource_limits,
         );
     }
 
@@ -294,6 +332,7 @@ fn run_external(
     timeout_ms: u64,
     iterations_set: bool,
     config: Config,
+    resource_limits: ResourceLimits,
 ) -> ExitCode {
     let seeds = match corpus_path {
         Some(path) => match load_corpus(&path) {
@@ -310,7 +349,8 @@ fn run_external(
     };
     let target = ExternalTarget::new(&program)
         .with_args(args)
-        .with_timeout(Duration::from_millis(timeout_ms));
+        .with_timeout(Duration::from_millis(timeout_ms))
+        .with_limits(resource_limits);
     let external_config = ExternalConfig {
         seed: config.seed,
         max_iterations,
@@ -323,6 +363,15 @@ fn run_external(
     println!("  seed       {}", external_config.seed);
     println!("  iterations {}", external_config.max_iterations);
     println!("  timeout    {timeout_ms} ms");
+    if let Some(bytes) = resource_limits.address_space_bytes {
+        println!("  memory     {} MiB", bytes / (1024 * 1024));
+    }
+    if let Some(seconds) = resource_limits.cpu_seconds {
+        println!("  cpu        {seconds} s");
+    }
+    if let Some(bytes) = resource_limits.file_size_bytes {
+        println!("  file size  {bytes} bytes");
+    }
     println!("  corpus     {} seed(s)\n", seeds.len());
 
     let report = fuzz_external(&target, &seeds, &external_config);

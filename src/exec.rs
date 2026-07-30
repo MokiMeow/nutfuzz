@@ -19,6 +19,8 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use crate::limits::{self, ResourceLimits};
+
 static NEXT_INPUT_ID: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,6 +64,7 @@ pub struct ExternalTarget {
     pub program: String,
     pub args: Vec<String>,
     pub timeout: Duration,
+    pub limits: ResourceLimits,
 }
 
 impl ExternalTarget {
@@ -70,6 +73,7 @@ impl ExternalTarget {
             program: program.into(),
             args: Vec::new(),
             timeout: Duration::from_secs(2),
+            limits: ResourceLimits::default(),
         }
     }
 
@@ -80,6 +84,11 @@ impl ExternalTarget {
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
+        self
+    }
+
+    pub fn with_limits(mut self, limits: ResourceLimits) -> Self {
+        self.limits = limits;
         self
     }
 
@@ -98,6 +107,9 @@ impl ExternalTarget {
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         configure_process_group(&mut command);
+        if let Err(error) = limits::configure(&mut command, self.limits) {
+            return RunResult::HarnessError(error);
+        }
         let child = command.spawn();
 
         let mut child = match child {
@@ -229,6 +241,7 @@ fn classify(status: std::process::ExitStatus) -> RunResult {
 #[cfg(test)]
 mod tests {
     use super::{ExternalTarget, RunResult};
+    use crate::limits::ResourceLimits;
     use std::time::Duration;
 
     #[test]
@@ -283,5 +296,30 @@ mod tests {
             .with_args(vec!["-c".into(), "sleep 10".into()])
             .with_timeout(Duration::from_millis(100));
         assert_eq!(target.run(&vec![b'x'; 1024 * 1024]), RunResult::Hang);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn file_size_limit_stops_unbounded_output() {
+        let output = std::env::temp_dir().join(format!(
+            "nutfuzz-limit-test-{}",
+            std::process::id()
+        ));
+        let script = format!(
+            "dd if=/dev/zero of={} bs=1024 count=16 2>/dev/null",
+            output.display()
+        );
+        let target = ExternalTarget::new("/bin/sh")
+            .with_args(vec!["-c".into(), script])
+            .with_limits(ResourceLimits {
+                file_size_bytes: Some(1_024),
+                ..ResourceLimits::default()
+            });
+
+        let result = target.run(b"");
+        let size = std::fs::metadata(&output).map(|meta| meta.len()).unwrap_or(0);
+        let _ = std::fs::remove_file(output);
+        assert_ne!(result, RunResult::Exited(0));
+        assert!(size <= 1_024, "limited file grew to {size} bytes");
     }
 }
