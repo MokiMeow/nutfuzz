@@ -1,4 +1,4 @@
-# ADR 0001 — No dependencies
+# ADR 0001: No dependencies
 
 **Status:** accepted · **Date:** 2026
 
@@ -19,12 +19,12 @@ Write everything with the Rust **standard library only**.
 - `rand` in particular would undermine the core guarantee: reproducibility
   depends on knowing *precisely* how every random decision is made. A
   hand-written xorshift is auditable in twenty lines.
-- Zero dependencies means `cargo test` works offline, with no version churn —
+- Zero dependencies means `cargo test` works offline, with no version churn -
   and the whole search is visible in this repo.
 
 ## Consequences
 
-- More code, and correctness sits here — which is why the suite tests mutation
+- More code, and correctness sits here: which is why the suite tests mutation
   totality (empty, one-byte, max-length) rather than trusting a library.
 - The PRNG is not cryptographic. That is fine: it chooses mutations, it does not
   protect anything.

@@ -1,9 +1,9 @@
-# 00 — Overview
+# 00: Overview
 
 ## What nutfuzz is
 
 A fuzzer: a program that finds bugs by feeding a target malformed input until
-something breaks. Written from scratch in Rust with no dependencies — the PRNG,
+something breaks. Written from scratch in Rust with no dependencies: the PRNG,
 the mutation engine, the corpus scheduler, the coverage feedback loop and the
 crash minimiser are all here.
 
@@ -31,7 +31,7 @@ crash minimiser are all here.
 ## What it is *not*
 
 - Not an exploitation framework. It finds crashes; it does not weaponise them.
-- Not (yet) coverage-guided — that is milestone 1, deliberately sequenced so the
+- Not (yet) coverage-guided: that is milestone 1, deliberately sequenced so the
   improvement can be **measured** against the milestone-0 baseline
   ([ADR 0002](decisions/0002-mutation-before-coverage.md)).
 - Not a replacement for AFL++/libFuzzer. Milestone 6 benchmarks against them and

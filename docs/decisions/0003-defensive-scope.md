@@ -1,4 +1,4 @@
-# ADR 0003 — Bug finding, not exploitation
+# ADR 0003: Bug finding, not exploitation
 
 **Status:** accepted · **Date:** 2026
 
@@ -27,7 +27,7 @@ Concretely:
 - It is the professional norm, and the norm exists because premature disclosure
   puts users at risk while maintainers are still fixing the bug.
 - It costs the project nothing technically: the interesting engineering is the
-  search — mutation, coverage, scheduling — not what a crash could be turned
+  search: mutation, coverage, scheduling: not what a crash could be turned
   into.
 - Stating the boundary explicitly makes the project's intent legible to anyone
   who finds it, which matters for a public security tool.
@@ -37,5 +37,5 @@ Concretely:
 - Milestone 5 treats disclosure as part of the Definition of Done, not an
   afterthought: a finding is not "done" until it has been reported properly.
 - `findings/` holds write-ups only for issues that are already public or fixed.
-- Impact is assessed honestly — a null-dereference is a robustness bug, not a
+- Impact is assessed honestly: a null-dereference is a robustness bug, not a
   critical vulnerability, and the write-ups say so.

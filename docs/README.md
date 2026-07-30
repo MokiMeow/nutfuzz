@@ -2,18 +2,20 @@
 
 ## Read in this order
 
-1. [00 — Overview](00-overview.md) — what it is and the design goals.
-2. [01 — Getting started](01-getting-started.md) — build, run, reproduce.
-3. [02 — Architecture](02-architecture.md) — how the pieces fit.
-4. [04 — Roadmap](04-roadmap.md) — the milestone plan.
-5. [05 — The mutation engine](05-mutation.md) — the milestone-0 core.
+1. [00: Overview](00-overview.md): what it is and the design goals.
+2. [01: Getting started](01-getting-started.md): build, run, reproduce.
+3. [02: Architecture](02-architecture.md): how the pieces fit.
+4. [04: Roadmap](04-roadmap.md): the milestone plan.
+5. [05: The mutation engine](05-mutation.md): the milestone-0 core.
 
 ## Concept references
 
-- [06 — Coverage feedback](06-coverage.md)
-- [07 — External targets](07-external-targets.md)
-- [10 — Safe campaign and disclosure](10-disclosure.md)
-- [10 — Glossary](10-glossary.md)
+- [06: Coverage feedback](06-coverage.md)
+- [07: External targets](07-external-targets.md)
+- [08: Testing](08-testing.md)
+- [09: Limitations](09-limitations.md)
+- [10: Safe campaign and disclosure](10-disclosure.md)
+- [10: Glossary](10-glossary.md)
 
 ## Milestones
 
@@ -26,5 +28,5 @@ ADRs: [decisions/](decisions/).
 ## Scope and ethics
 
 nutfuzz is for code you own or are authorised to test. Real findings follow
-coordinated disclosure — see §8 of [AGENTS.md](../AGENTS.md) and
+coordinated disclosure: see §8 of [AGENTS.md](../AGENTS.md) and
 [milestone 5](milestones/milestone-5-real-target.md).

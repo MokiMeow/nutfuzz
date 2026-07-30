@@ -23,7 +23,7 @@ and stays quiet on code with no bugs**.
 2. Implement its tasks.
 3. Prove it: the buggy target must still yield a minimised reproducer, **and**
    the fixed target must still yield nothing.
-4. Measure — executions-to-first-crash across several seeds, not a claim.
+4. Measure: executions-to-first-crash across several seeds, not a claim.
 5. Update the doc, tick the DoD, update README/CHANGELOG/roadmap.
 6. Commit (`type(scope): …`), keep CI green.
 
@@ -35,4 +35,4 @@ cannot file a bug report.
 
 **No false positives.** The `reports_nothing_when_there_is_nothing_to_find` test
 must keep passing at every milestone. A fuzzer that always reports a crash
-proves nothing — that test is what makes every other finding credible.
+proves nothing: that test is what makes every other finding credible.

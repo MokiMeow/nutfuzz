@@ -1,105 +1,95 @@
-# 01 — Getting started
+# Getting started
 
 ## Requirements
 
-A Rust toolchain. No dependencies.
+Use a Rust 2021 compatible `cargo` and `rustc`. NutFuzz has no third-party crate
+dependencies. Linux is required for the complete external resource-control and
+forkserver paths.
+
+## Build and test
 
 ```bash
-sudo apt-get update && sudo apt-get install -y cargo rustc
-# or: curl https://sh.rustup.rs -sSf | sh
+cargo build --release --all-targets
+cargo test --release --all-targets
 ```
 
-## Find the planted bug
+The release suite currently runs 82 tests.
+
+## First campaigns
 
 ```bash
-cargo run --release
+# Find the planted record-parser bug.
+./target/release/nutfuzz
+
+# Stay quiet on the corrected parser.
+./target/release/nutfuzz --target parse_record_fixed --iterations 200000
+
+# Replay one deterministic campaign.
+./target/release/nutfuzz --target parse_nested \
+  --seed 12648430 --iterations 300000
+
+# Compare guided and blind mutation.
+./target/release/nutfuzz --bench
 ```
 
-```
-nutfuzz milestone 0 — deterministic mutation fuzzing
+The seed controls every random mutation and scheduling decision. The same
+binary, seed, inputs, configuration, and budget reproduce the same search path.
+Elapsed time and executions per second remain host-dependent.
 
-  target     parse_record
-  seed       24301
-  iterations 200000
-
-  2976 executions in 0.00s  (5943774 exec/s)
-
-  1 crash(es) found:
-
-    iteration 2975
-    reason    out-of-bounds read: record claims 67 payload bytes, only 3 present
-    input     8 bytes  "REC\x07C\x01\x01\x00"
-    minimised 5 bytes  "REC\x07\x01"
-    replay    cargo run --release -- --seed 24301 --iterations 2976
-```
-
-## Prove it isn't crying wolf
-
-The same fuzzer against a corrected version of the parser:
-
-```bash
-cargo run --release -- --target parse_record_fixed --iterations 200000
-```
-
-```
-  200000 executions in 0.03s  (6344359 exec/s)
-
-  no crashes found
-```
-
-This is the check that makes the finding above mean anything.
-
-## Reproduce a campaign
-
-Every decision comes from the seed, so a run replays exactly:
-
-```bash
-cargo run --release -- --seed 24301 --iterations 2976
-```
-
-Same seed, same mutations, same crash, same iteration number.
-
-## Options
+## Important options
 
 | Flag | Meaning |
 |---|---|
-| `--target NAME` | which target to fuzz (`--list` to see them) |
-| `--seed N` | PRNG seed; the reproducibility handle |
-| `--iterations N` | execution budget |
-| `--keep-going` | don't stop at the first crash |
-| `--external PROGRAM` | run a local authorised binary as a blind target |
-| `--arg VALUE` | add one target argument; repeat as needed |
-| `--corpus DIR` | load seed files in deterministic sorted order |
-| `--timeout-ms N` | per-execution external timeout |
-| `--artifacts DIR` | private output directory for minimised findings |
-| `--list` | list available targets |
+| `--target NAME` | Select an included in-process target |
+| `--list` | List included targets |
+| `--seed N` | Select the deterministic random stream |
+| `--iterations N` | Set the campaign loop budget |
+| `--mode guided|blind` | Enable or disable coverage feedback |
+| `--schedule weighted|round-robin` | Select corpus scheduling |
+| `--progress N` | Print progress every N executions |
+| `--stability-runs N` | Rerun interesting inputs before admission |
+| `--trim` | Trim stable coverage-increasing corpus entries |
+| `--dict A,B` | Supply dictionary tokens |
+| `--auto-dict` | Learn bounded printable tokens from admitted inputs |
+| `--grammar json` | Generate small JSON objects as a mutation strategy |
+| `--fixup checksum` | Repair the included wrapping-checksum format |
+| `--external PROGRAM` | Run an authorized local program |
+| `--arg VALUE` | Add one external target argument; repeat as needed |
+| `--corpus DIR` | Load external seeds in sorted path order |
+| `--timeout-ms N` | Set the external execution timeout |
+| `--memory-mb N` | Set the Linux address-space limit |
+| `--cpu-seconds N` | Set the Linux CPU-time limit |
+| `--file-size-bytes N` | Set the Linux output-file limit |
+| `--artifacts DIR` | Set the private finding output directory |
 
-## Tests
+## Structured campaign example
 
 ```bash
-cargo test
+./target/release/nutfuzz --target parse_checksum \
+  --dict CHECK --fixup checksum --seed 41 --iterations 2000
 ```
 
-65 tests: mutation totality (empty / one-byte / max-length inputs), PRNG
-determinism, coverage and scheduling, external process behavior, deterministic
-artifacts, bug-finding, **false positives**, and minimisation.
+The owned target accepts a structured token only when its final byte matches
+the wrapping sum of the preceding bytes. The regression test proves the same
+campaign stays quiet without the fixup.
 
 ## Safe external smoke test
 
-This exercises the external path against a known-clean local program:
-
 ```bash
-cargo run --release -- --external /bin/true --iterations 20 --seed 42
+./target/release/nutfuzz --external /bin/true --iterations 20 \
+  --timeout-ms 500 --memory-mb 64 --cpu-seconds 1 \
+  --file-size-bytes 1024
 ```
 
-It must report 20 executions and no crashes or hangs. See
+It must report 20 executions and no crashes or hangs. Read
 [external targets](07-external-targets.md) before using another program.
 
-## Reading the output
+## Reading a finding
 
-- **iteration** — which execution produced the crash; with the seed, it replays.
-- **input** — the raw crashing bytes, non-printables escaped.
-- **minimised** — the smallest input that still crashes. This is the one to put
-  in a bug report.
-- **exec/s** — throughput. In-process targets are fast; external binaries
-  (milestone 3) will be orders of magnitude slower until the fork server lands.
+- `iteration` identifies when the finding first appeared.
+- `reason` records the owned target message or external result class.
+- `signature` groups in-process paths by root-cause coverage.
+- `input` is the original candidate with non-printable bytes escaped.
+- `minimised` is the smallest candidate retained by greedy deletion.
+- `replay` records the target, seed, and budget required to reproduce the
+  campaign.

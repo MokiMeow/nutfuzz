@@ -1,4 +1,4 @@
-# 10 — Safe campaign and disclosure workflow
+# 10: Safe campaign and disclosure workflow
 
 This repository provides defensive testing infrastructure. It does not grant
 permission to test any third-party system.

@@ -1,43 +1,71 @@
-# 07 — External targets
+# External targets
 
-NutFuzz can run a normal binary as a deterministic, blind target:
+NutFuzz can run an authorized local binary through the reference exec-per-run
+path:
 
 ```bash
-cargo run --release -- \
-  --external /path/to/authorised-target \
+./target/release/nutfuzz \
+  --external /path/to/authorized-target \
   --corpus corpus \
   --iterations 1000 \
   --timeout-ms 500 \
+  --memory-mb 256 \
+  --cpu-seconds 1 \
+  --file-size-bytes 1048576 \
   --artifacts crashes
 ```
 
-`--arg VALUE` may be repeated to supply target arguments. Corpus files are
-loaded in sorted path order, every mutation comes from the campaign seed, and
-findings are deduplicated by result class. A crash is minimised while
-preserving its signal; a hang is minimised while preserving its timeout.
-Artifacts contain the minimised bytes and a text record of the seed,
-iteration, result, and sizes. Unix artifact files are created with owner-only
-permissions (`0600`).
+`--arg VALUE` may be repeated. Corpus files are loaded in sorted path order and
+mutations derive from the campaign seed. Findings are deduplicated by result
+class. Crash minimisation preserves the signal; hang minimisation preserves the
+timeout. Unix artifacts and temporary input files use owner-only permissions.
 
 ## Classification
 
-- `Crashed`: the process died from SIGILL, SIGABRT, SIGBUS, SIGFPE, or SIGSEGV;
-  this is a finding to triage, not automatic proof of a defect.
-- `Hang`: the process exceeded its timeout; intentional long work must still be
-  ruled out.
-- `Exited`: any normal exit, including non-zero rejection of malformed input.
-- `HarnessError`: setup or spawn failed. This stops the campaign and is never
-  reported as a target finding.
+- `Crashed`: SIGILL, SIGABRT, SIGBUS, SIGFPE, or SIGSEGV.
+- `Hang`: execution exceeded the configured wall-clock timeout.
+- `Exited`: normal completion, including nonzero malformed-input rejection.
+- `HarnessError`: setup, limit configuration, or spawn failure.
 
-Target stdin is backed by a temporary file. A pipe can fill when a target never
-reads input and block the harness before its timeout loop starts. On Unix, each
-target runs in a fresh process group, so timeout cleanup kills descendants as
-well as the direct child.
+A classified crash is evidence for triage, not automatic proof of a security
+defect.
 
-## Current boundary
+## Isolation and cleanup
 
-External campaigns are blind because the target does not yet publish compiler
-coverage to NutFuzz. They are also `exec`-bound: there is no fork server. Run
-only software you own or are explicitly authorised to test, and supervise
-targets that may allocate unbounded memory because address-space limits are not
-yet installed.
+Target stdin is backed by a file because a pipe can fill before the timeout
+loop begins. Unix targets start in their own process group, and timeout cleanup
+kills the group rather than only its direct child.
+
+On Linux, NutFuzz applies:
+
+- `RLIMIT_AS` for address space;
+- `RLIMIT_CPU` for CPU seconds;
+- `RLIMIT_FSIZE` for created-file size;
+- `RLIMIT_CORE=0` for core-dump suppression.
+
+Unsupported platforms reject nonempty limits explicitly.
+
+## Cooperative local forkserver
+
+`ForkserverTarget` uses the versioned protocol documented in
+[architecture](02-architecture.md). The included
+`nutfuzz-forkserver-target` binary is Linux-only and evaluates only the owned
+`parse_nested` target. It demonstrates coverage replies and persistent
+initialization without claiming instrumentation of arbitrary programs.
+
+Run the local comparison:
+
+```bash
+cargo build --release --all-targets
+./target/release/examples/forkserver-bench \
+  target/release/nutfuzz-forkserver-target
+```
+
+The recorded test-host result was 0.238 seconds for 1,000 forkserver requests
+and 1.862 seconds for 1,000 fresh `/bin/true` processes.
+
+## Authorization boundary
+
+External execution is a capability, not permission. Only use it on software
+you own or are explicitly authorized to test. The repository's third-party
+campaign milestone remains excluded and contains no vulnerability claim.

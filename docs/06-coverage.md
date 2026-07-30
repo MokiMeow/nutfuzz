@@ -1,6 +1,6 @@
-# 06 — Coverage feedback
+# 06: Coverage feedback
 
-*Milestone 1.* The idea that turns random search into guided search — and its
+*Milestone 1.* The idea that turns random search into guided search: and its
 real limits, measured rather than asserted.
 
 ## The problem with blind mutation
@@ -46,7 +46,7 @@ XOR-ing the previous and current block ids identifies the **edge** A→B rather
 than just "B was reached", so different paths through the same code are
 distinguishable. The `>> 1` keeps A→B and B→A apart.
 
-### Why the ids are hashed — a bug worth keeping in the docs
+### Why the ids are hashed: a bug worth keeping in the docs
 
 The first implementation used the small sequential ids written at each call
 site. That collides catastrophically:
@@ -63,7 +63,7 @@ call-site id (Fibonacci hashing) to get the same spread, and a test asserts
 that each correct magic byte uncovers a *new* edge.
 
 The failure mode is worth internalising: a broken coverage map does not crash
-or error — the fuzzer just quietly stops finding things.
+or error: the fuzzer just quietly stops finding things.
 
 ## Hit-count bucketing
 
@@ -88,7 +88,7 @@ there is no gradient to climb and a guided fuzzer stalls like a blind one.
 - the same campaign **with a dictionary** containing `"FUZZ"` opens it.
 
 This is precisely why real fuzzers ship dictionaries and comparison tracing
-(AFL's cmplog, libFuzzer's value profile) — not as extras, but because coverage
+(AFL's cmplog, libFuzzer's value profile): not as extras, but because coverage
 alone has this hole.
 
 Written up rather than hidden, because a limitation you can state and
@@ -100,7 +100,7 @@ Production fuzzers get edge callbacks from the compiler
 (`-fsanitize-coverage=trace-pc-guard`). nutfuzz's in-process targets call
 `cov.trace(id)` by hand, so the machinery is visible instead of hidden behind a
 flag. The feedback loop, bitmap, bucketing and scheduling are identical either
-way — only the source of the callbacks differs.
+way: only the source of the callbacks differs.
 
 ## Traps
 
@@ -113,4 +113,4 @@ way — only the source of the callbacks differs.
 ## References
 
 - [AFL technical whitepaper](https://lcamtuf.coredump.cx/afl/technical_details.txt)
-- libFuzzer documentation — value profiles and comparison tracing.
+- libFuzzer documentation: value profiles and comparison tracing.

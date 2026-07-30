@@ -1,171 +1,258 @@
 <h1 align="center">nutfuzz</h1>
 
 <p align="center">
-  <em>A coverage-guided fuzzer written from scratch in Rust — mutation engine,
-  edge-coverage feedback, corpus scheduling, dictionaries, and a crash
-  minimiser. No dependencies.</em>
+  A deterministic, coverage-guided fuzzer built from scratch in Rust.
+  Mutation, scheduling, structured inputs, minimisation, process isolation,
+  and a local forkserver, with no third-party crate dependencies.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/lang-Rust-orange" alt="Rust">
-  <img src="https://img.shields.io/badge/deps-none-brightgreen" alt="no dependencies">
-  <img src="https://img.shields.io/badge/reproducible-seeded-blue" alt="deterministic">
-  <img src="https://img.shields.io/badge/release-v1.1.0-brightgreen" alt="v1.1.0">
+  <img src="https://img.shields.io/badge/Rust-2021-orange" alt="Rust 2021">
+  <img src="https://img.shields.io/badge/dependencies-none-brightgreen" alt="No dependencies">
+  <img src="https://img.shields.io/badge/tests-82%20passing-brightgreen" alt="82 passing tests">
+  <img src="https://img.shields.io/badge/release-v1.2.0-blue" alt="v1.2.0">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT">
 </p>
 
----
+## Overview
 
-## What this is
+NutFuzz is a compact implementation of the core ideas behind modern fuzzers.
+It mutates a seed corpus, records edge coverage, retains inputs that discover
+new behavior, assigns mutation energy to useful entries, and reduces findings
+to small deterministic reproducers.
 
-A fuzzer finds bugs by feeding a target malformed input until something breaks.
-The interesting part is *how it chooses what to feed*: mutation strategies,
-coverage feedback that notices when an input reached somewhere new, and
-scheduling that decides which input to mutate next.
+The project includes two execution paths:
 
-nutfuzz implements all of that from scratch — no `libfuzzer`, no `afl`, no
-`rand` crate.
+- In-process targets provide fast, explicit edge coverage for teaching,
+  experiments, and deterministic regression tests.
+- External targets run as isolated subprocesses with timeout, process-group,
+  memory, CPU, file-size, artifact, and minimisation controls.
 
-## The result that matters
+A versioned local forkserver demonstrates persistent initialization and
+coverage-bearing replies against the repository-owned synthetic target. It is
+intentionally not a general binary-instrumentation system.
 
-A bug hidden behind **seven gates** (four magic bytes, a version, a mode, and a
-size check). Same mutation engine, same budget, same seeds — the only
-difference is whether coverage feedback is on:
+## Measured results
 
+### Coverage guidance
+
+`parse_nested` hides a planted bug behind seven gates. With the same mutation
+engine, budget, and ten seeds:
+
+| Mode | Findings | Median executions to first finding |
+|---|---:|---:|
+| Blind mutation | 0/10 | Not found |
+| Coverage-guided | 8/10 | 126,059 |
+
+Blind mutation used three million executions without reaching the planted bug.
+Coverage guidance keeps partial progress and solves the gates incrementally.
+
+### Scheduling
+
+For seed `12648430` and a 300,000-iteration budget, both schedulers found the
+same 17 edges and the same planted bug:
+
+| Scheduler | First finding |
+|---|---:|
+| Weighted | 287,266 |
+| Round-robin | 198,674 |
+
+Round-robin won this seed. NutFuzz reports the comparison rather than claiming
+one policy wins every workload.
+
+### Persistent execution
+
+On the local WSL2 environment, 1,000 executions measured by
+`examples/forkserver-bench.rs` produced:
+
+| Executor | Elapsed |
+|---|---:|
+| Fresh `/bin/true` process per run | 1.862 s |
+| Owned local forkserver target | 0.238 s |
+
+That is a measured 7.82x speedup for this synthetic comparison. Results vary by
+host and target.
+
+## Features
+
+- Deterministic xorshift64* random generator and replayable campaign seeds.
+- Ten bounded mutation strategies with stacked havoc and corpus splicing.
+- AFL-style edge hashing, hit-count buckets, and coverage signatures.
+- Weighted and round-robin scheduling with a greedy favored corpus.
+- Live progress callbacks and CLI progress output.
+- Coverage stability checks before corpus admission.
+- Coverage-preserving corpus trimming.
+- Manual dictionaries, learned printable tokens, and token-aware replacement.
+- JSON grammar generation and post-mutation fixup hooks.
+- A checksum-gated owned target that proves fixups open otherwise closed paths.
+- Crash deduplication and greedy reproducer minimisation.
+- External process crash, exit, hang, and harness-error classification.
+- Linux process-group cleanup and `setrlimit` controls.
+- Private deterministic crash artifacts and sorted seed-corpus loading.
+- A framed, versioned, bounded local forkserver protocol with timeout recovery.
+- An opt-in AFL++ comparison that only compiles the included synthetic target.
+
+## Architecture
+
+```text
+seed corpus
+    |
+    v
+scheduler -> mutation / grammar / tokens -> optional fixup
+    |                                      |
+    |                                      v
+    +------------------------------- target execution
+                                            |
+                              +-------------+-------------+
+                              |                           |
+                        edge coverage                run result
+                              |                           |
+                     stability + trimming      dedup + minimisation
+                              |                           |
+                         growing corpus              artifacts
 ```
-$ nutfuzz --bench
-budget 300000 executions, 10 seeds
 
-  fuzzer                            found       median execs
-  blind mutation                     0/10          not found
-  coverage-guided                    8/10             126059
-```
+The in-process feedback loop lives in `src/fuzzer.rs`. External execution is
+split between `src/exec.rs`, `src/external.rs`, and `src/limits.rs`. The local
+persistent protocol is implemented by `src/protocol.rs`,
+`src/forkserver.rs`, and `src/bin/nutfuzz-forkserver-target.rs`.
 
-**Blind mutation never got through** — 3 million executions across ten seeds,
-zero findings. Coverage guidance solves the gates one at a time, because
-passing each one reaches new code and that input is kept:
+## Requirements
 
-```
-$ nutfuzz --target parse_nested
-  235783 executions in 4.21s  (55988 exec/s)
-  edges 17   corpus 9 (9 favoured)   unique bugs 1
+- Rust 2021 compatible `cargo` and `rustc`.
+- Linux for process groups, resource limits, and the local forkserver.
+- Unix for the external signal-classification tests.
+- Optional AFL++ tools, `afl-fuzz` and `afl-clang-fast`, for the owned-target
+  comparison script.
 
-  1 unique bug(s):
-    reason    integer overflow: size 255 exceeds the 200-byte buffer
-    input     85 bytes  "FUZZ\x02B\xff\xff\xff\x7fBB\xb8 \xb8A\x92..."
-    minimised 7 bytes  "FUZZ\x02B\xff"
-    replay    nutfuzz --target parse_nested --seed 24301 --iterations 235783
-```
-
-An 85-byte crash shrunk to the **7 bytes that actually matter**, with a command
-that reproduces it exactly.
-
-And the check that makes any of this mean something — the same fuzzer against a
-corrected target:
-
-```
-$ nutfuzz --target parse_record_fixed --iterations 200000
-  200000 executions ... no crashes found
-```
-
-**Zero false positives.** A fuzzer that always reports a crash is worthless.
-
-## What coverage feedback cannot do
-
-Worth stating plainly, because it is the most useful thing here to understand.
-
-Coverage guidance works by giving **partial credit**: getting one gate right
-reaches a new edge, so that input is kept and refined. But a *single* four-byte
-comparison —
-
-```rust
-if &data[0..4] != b"FUZZ" { return; }     // all four bytes, one operation
-```
-
-— leaks no progress. Three of four bytes correct reaches exactly the same
-edges as zero of four, so there is nothing to steer on and a guided fuzzer
-stalls precisely like a blind one. nutfuzz keeps a `parse_magic` target that
-demonstrates this, and a test proving a **dictionary** opens the gate that
-coverage alone cannot. This is why real fuzzers ship dictionaries and
-comparison tracing (AFL's cmplog, libFuzzer's value profile).
-
-## Why it is interesting (the depth on show)
-
-- **Edge coverage, AFL-style** — `index = hash(block) ^ prev`, hit counts
-  bucketed so loop iteration counts don't flood the corpus. Block ids are
-  *hashed* because sequential ids collide catastrophically under XOR — with
-  ids 20–30, two different edges landed on the same index and the signal
-  vanished. ([docs/06-coverage.md](docs/06-coverage.md))
-- **Corpus scheduling** — energy weighted by size and novelty, plus a greedy
-  set-cover "favoured" subset that still reaches every known edge.
-- **Crash deduplication by root cause** — grouped by coverage signature, not
-  input bytes. One bug reached ten ways is one bug.
-- **A real mutation engine** — bit/byte flips, interesting integers at 8/16/32
-  bits in both endiannesses, arithmetic deltas, block duplication, splicing,
-  stacked 1–8 deep. ([docs/05-mutation.md](docs/05-mutation.md))
-- **External targets** — run real binaries, and tell a **crash** (SIGSEGV/
-  SIGABRT/…) from a **hang** (timeout) from a program correctly rejecting bad
-  input with a non-zero exit. Conflating those is a classic mistake.
-- **Deterministic external campaigns** — sorted seed corpora, bounded process
-  execution, signal/hang-preserving minimisation, and stable artifacts. The
-  external path remains blind until shared-memory coverage instrumentation is
-  added. ([docs/07-external-targets.md](docs/07-external-targets.md))
-- **Determinism as a contract** — every decision comes from one seeded PRNG, so
-  `--seed N` replays a campaign byte for byte, including the iteration a crash
-  appeared on.
+The core in-process engine builds on other Rust-supported platforms. Unsupported
+operating-system features return an explicit error instead of silently ignoring
+the requested protection.
 
 ## Quick start
 
 ```bash
-cargo run --release                                  # fuzz the record parser
-cargo run --release -- --target parse_nested         # the seven-gate target
-cargo run --release -- --target parse_nested --mode blind   # the baseline
-cargo run --release -- --bench                       # blind vs guided, 10 seeds
-cargo run --release -- --dict FUZZ                   # with a dictionary
-cargo run --release -- --seed 42 --iterations 500000
-cargo run --release -- --external /bin/true --iterations 20
-cargo test --release                                 # 65 tests
+cargo build --release
+cargo test --release --all-targets
+
+# Find the planted record-parser bug.
+./target/release/nutfuzz
+
+# Compare blind and guided campaigns.
+./target/release/nutfuzz --bench
+
+# Exercise scheduling and live progress.
+./target/release/nutfuzz --target parse_nested \
+  --schedule round-robin --progress 10000
+
+# Reach the owned checksum gate with a dictionary and fixup.
+./target/release/nutfuzz --target parse_checksum \
+  --dict CHECK --fixup checksum --seed 41 --iterations 2000
+
+# Run a clean external target with defensive limits.
+./target/release/nutfuzz --external /bin/true --iterations 20 \
+  --timeout-ms 500 --memory-mb 64 --cpu-seconds 1 \
+  --file-size-bytes 1024
 ```
 
-## Status — engine complete; authorised real-world campaign pending
+Structured local options include `--auto-dict`, `--grammar json`,
+`--stability-runs N`, and `--trim`. Use `--seed N` to reproduce the same
+mutation decisions.
 
-| # | Milestone | State |
-|---|-----------|-------|
-| 0 | Mutation engine, fuzzing loop, minimiser | ✅ done |
-| 1 | Coverage instrumentation + feedback | ✅ done |
-| 2 | Corpus scheduling, energy, crash dedup | ✅ done |
-| 3 | External binaries: signals, hangs, timeouts | ✅ done |
-| 4 | Dictionaries + token mutation | ✅ done |
-| 5 | Harness for real targets *(see below)* | ◐ capability built |
-| 6 | Benchmarks, CI, `v1.0.0` | ✅ done |
+## Local benchmark and demo
 
-**Milestone 5, honestly:** the machinery to fuzz real external software is
-built and tested (CLI, deterministic corpus loading, process-tree timeouts,
-signal/hang classification, dictionaries, minimisation, artifacts, and dedup).
-**No genuine third-party bug has been found or disclosed through it.** The
-owner explicitly kept this audit to normal safe engineering, so no external
-vulnerability campaign was launched. See
-[milestone 5](docs/milestones/milestone-5-real-target.md) and the
-[safe campaign workflow](docs/10-disclosure.md).
+```bash
+cargo build --release --all-targets
+./target/release/examples/forkserver-bench \
+  target/release/nutfuzz-forkserver-target
 
-## Scope and ethics
+./scripts/benchmark-aflpp.sh
+```
 
-A bug-*finding* tool for code you own or are authorised to test. Real findings
-go through **coordinated disclosure**: report privately to the maintainer,
-agree a timeline, publish after a fix. This repository will never carry a
-weaponised exploit or a reproducer for an unfixed third-party bug — the value
-here is the search technique.
+The AFL++ script exits successfully with an explicit `SKIP` when the optional
+tools are unavailable. It never downloads software or targets third-party
+code. An authentic asciinema v2 recording of the checksum campaign is stored
+at [docs/assets/campaign.cast](docs/assets/campaign.cast).
+
+## Testing
+
+The release suite contains 82 tests covering:
+
+- mutation totality on empty, one-byte, and maximum-size inputs;
+- deterministic random generation, scheduling, campaigns, and artifacts;
+- edge hashing, bucket changes, signatures, stability, and corpus trimming;
+- dictionaries, learned tokens, JSON generation, and checksum fixups;
+- finding discovery, deduplication, minimisation, and corrected-target silence;
+- external exits, signals, timeouts, process cleanup, and resource limits;
+- protocol truncation, oversize, version rejection, repeated replies, crashes,
+  timeout recovery, and deterministic forkserver coverage.
+
+CI builds with `RUSTFLAGS=-Dwarnings`, runs the complete release suite, proves
+the planted bug is found, proves the corrected target stays quiet, and checks a
+clean external program.
+
+## Limitations
+
+- Coverage feedback cannot infer partial progress inside one opaque multi-byte
+  comparison. Dictionaries and fixups help known formats; full comparison
+  tracing is not implemented.
+- Arbitrary external binaries do not expose edge coverage. They use the safe
+  exec-per-run path unless adapted to the repository's cooperative protocol.
+- The JSON grammar is deliberately small and is not a complete JSON generator.
+- Stability checks detect changing coverage snapshots, not every source of
+  target nondeterminism.
+- Resource limits and the forkserver are Linux-specific.
+- No third-party fuzzing campaign or vulnerability disclosure was performed.
+  That work requires explicit target authorization and remains outside this
+  safe local engineering scope.
+
+## Project status
+
+| Milestone | Status |
+|---|---|
+| Mutation core | Complete |
+| Coverage feedback | Complete |
+| Scheduling and progress | Complete |
+| External process execution | Complete |
+| Structured input support | Complete |
+| Safe local forkserver and polish | Complete |
+| Third-party campaign and disclosure | Intentionally excluded |
+
+## Documentation
+
+- [Overview](docs/00-overview.md)
+- [Getting started](docs/01-getting-started.md)
+- [Architecture](docs/02-architecture.md)
+- [Mutation engine](docs/05-mutation.md)
+- [Coverage feedback](docs/06-coverage.md)
+- [External targets](docs/07-external-targets.md)
+- [Testing](docs/08-testing.md)
+- [Limitations](docs/09-limitations.md)
+- [Disclosure and authorization](docs/10-disclosure.md)
+- [Roadmap](docs/04-roadmap.md)
+- [Milestone specifications](docs/milestones/README.md)
+- [Changelog](CHANGELOG.md)
 
 ## Repository layout
 
-```
+```text
 nutfuzz/
-├── src/          # rng, mutation, coverage, corpus, exec, external runner
-├── tests/        # bug-finding, false positives, and coverage-beats-blind
-├── docs/         # mutation, coverage, roadmap, milestones, ADRs
-└── Cargo.toml    # zero dependencies
+|-- src/             engine, executors, protocol, CLI, owned targets
+|-- tests/           integration and campaign evidence
+|-- bench/           owned AFL++ comparison target
+|-- examples/        local executor benchmark
+|-- scripts/         reproducible, opt-in benchmark helpers
+|-- docs/            concepts, decisions, milestones, and demo asset
+`-- Cargo.toml       dependency-free Rust package
 ```
+
+## Responsible use
+
+Only fuzz software you own or are explicitly authorized to test. Treat
+findings as potentially sensitive, minimize access to reproducers, and follow
+the target's coordinated-disclosure policy. This repository contains synthetic
+planted bugs for validation and no claim about a third-party vulnerability.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

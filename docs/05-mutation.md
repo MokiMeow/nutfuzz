@@ -1,6 +1,6 @@
-# 05 — The mutation engine
+# 05: The mutation engine
 
-*Milestone 0.* How one input becomes the next candidate — the part that decides
+*Milestone 0.* How one input becomes the next candidate: the part that decides
 whether a fuzzer finds anything.
 
 ## The mutations
@@ -16,7 +16,7 @@ Each targets a class of real bug rather than being random noise.
 | `Arithmetic` | adds/subtracts 1..35 | off-by-one; length fields nudged past a limit |
 | `InsertBytes` | inserts 1..16 bytes | buffers sized from a shorter input |
 | `DeleteBytes` | removes a run | truncation and missing-field handling |
-| `DuplicateBlock` | repeats an existing chunk | **buffer overflow** — the classic |
+| `DuplicateBlock` | repeats an existing chunk | **buffer overflow**: the classic |
 | `Splice` | grafts part of another corpus input | crossing structure between inputs |
 
 `InterestingN` writing both byte orders matters: the target may parse either,
@@ -34,14 +34,14 @@ pub fn havoc(input: &mut Vec<u8>, other: &[u8], rng: &mut Rng) {
 ```
 
 Single mutations explore too slowly. Many bugs need **two or three coordinated
-changes** — a length field raised *and* the payload shortened, which is exactly
+changes**: a length field raised *and* the payload shortened, which is exactly
 the shape of milestone 0's planted bug. Stacking 1–8 mutations per round is
 AFL's "havoc" stage and it is what drives discovery.
 
 ## Two invariants every mutation must hold
 
 1. **Totality.** No mutation may panic on empty input, one-byte input, or input
-   at `MAX_LEN`. Each has a test for all three — those edges are where a fuzzer
+   at `MAX_LEN`. Each has a test for all three: those edges are where a fuzzer
    crashes itself instead of the target.
 2. **Bounded growth.** `MAX_LEN` (64 KiB) caps every insertion, duplication and
    splice. Without it the corpus grows without limit and the fuzzer becomes its
@@ -49,7 +49,7 @@ AFL's "havoc" stage and it is what drives discovery.
 
 ## Determinism
 
-Every decision — which mutation, which offset, how many rounds — comes from the
+Every decision: which mutation, which offset, how many rounds: comes from the
 seeded `Rng`. That makes a campaign replayable:
 
 ```
@@ -64,12 +64,12 @@ bug in the fuzzer.
 
 There is **no coverage feedback yet**, so the corpus never grows: every
 candidate is mutated from a seed input and thrown away. That is a real
-limitation, stated plainly — and it is the baseline milestone 1 has to beat with
+limitation, stated plainly: and it is the baseline milestone 1 has to beat with
 a measured number. See
 [ADR 0002](decisions/0002-mutation-before-coverage.md).
 
 ## References
 
 - [AFL technical whitepaper](https://lcamtuf.coredump.cx/afl/technical_details.txt)
-  — the origin of these mutation stages.
-- AFL++ documentation — the modern refinements.
+ : the origin of these mutation stages.
+- AFL++ documentation: the modern refinements.

@@ -1,4 +1,4 @@
-# AGENTS.md — how this repo is built
+# AGENTS.md: how this repo is built
 
 The working agreement for this repository: anyone contributing to nutfuzz should
 read it fully before making changes. If anything here conflicts with a note
@@ -8,9 +8,9 @@ elsewhere, **this file wins.**
 
 ## 1. How the work is organised
 
-- **Planning** — defines milestones and their Definitions of Done, reviews
+- **Planning**: defines milestones and their Definitions of Done, reviews
   diffs, keeps the claims honest.
-- **Implementation** — proceed one milestone at a time against
+- **Implementation**: proceed one milestone at a time against
   `docs/milestones/`, keeping the build clean and every test green.
 
 The loop: **pick the lowest-numbered unfinished milestone → implement → build
@@ -28,7 +28,7 @@ of Done → update docs/CHANGELOG → commit → next.**
    target. A fuzzer that always reports a crash proves nothing.
 3. **A finding must come with a minimised reproducer.** Raw crashing inputs are
    not bug reports.
-4. **No dependencies.** `std` only — the PRNG, mutations, scheduler, coverage
+4. **No dependencies.** `std` only: the PRNG, mutations, scheduler, coverage
    map and minimiser are the project
    ([ADR 0001](docs/decisions/0001-no-dependencies.md)).
 5. **The build must never break.** `cargo build --release` and `cargo test` are
@@ -99,7 +99,7 @@ third-party code, responsibly disclosed.
 - Do not add a dependency (no `rand`, no `libfuzzer-sys`, no `arbitrary`).
 - Do not claim a strategy is better without executions-to-first-crash data.
 - Do not commit a weaponised exploit, or any reproducer for an unfixed
-  third-party bug, to this repository — see §8.
+  third-party bug, to this repository: see §8.
 
 ## 8. Scope and ethics
 
@@ -110,11 +110,11 @@ issue is public. The contribution here is the search technique.
 
 ## 9. Tools reference
 
-- **cargo** — build, test, bench.
-- **`cargo test -- --nocapture`** — see fuzzer output while debugging.
-- **AFL++ / libFuzzer docs** — the reference designs for coverage feedback and
+- **cargo**: build, test, bench.
+- **`cargo test -- --nocapture`**: see fuzzer output while debugging.
+- **AFL++ / libFuzzer docs**: the reference designs for coverage feedback and
   corpus scheduling; cite them when implementing an equivalent idea.
-- **`perf stat`** — when execution throughput drops, find out why.
+- **`perf stat`**: when execution throughput drops, find out why.
 
 Build one milestone, prove it finds bugs *and* stays quiet on clean code,
 document it, commit. Then the next.

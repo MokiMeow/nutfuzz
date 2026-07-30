@@ -1,4 +1,4 @@
-# ADR 0002 — Build blind mutation before coverage feedback
+# ADR 0002: Build blind mutation before coverage feedback
 
 **Status:** accepted · **Date:** 2026
 
@@ -19,7 +19,7 @@ first. Add coverage feedback in milestone 1.
   table of executions-to-first-crash, blind versus guided, on a
   nested-condition target. Without a baseline that number does not exist, and
   "coverage guidance helps" stays an assertion.
-- The unglamorous parts — determinism, minimisation, no false positives — are
+- The unglamorous parts: determinism, minimisation, no false positives: are
   what make *any* finding credible, and they are easier to get right before a
   feedback loop is moving the corpus underneath them.
 - A blind fuzzer is a genuinely useful reference implementation. When guided
@@ -32,4 +32,4 @@ first. Add coverage feedback in milestone 1.
   nested conditions. This is stated plainly in the README and
   [docs/05](../05-mutation.md) rather than glossed over.
 - Milestone 1 must demonstrate a large win on a nested-condition target. If it
-  does not, the implementation is wrong — the ADR makes that falsifiable.
+  does not, the implementation is wrong: the ADR makes that falsifiable.
