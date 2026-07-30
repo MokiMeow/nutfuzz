@@ -44,6 +44,10 @@ impl RunResult {
     }
 }
 
+pub trait Executor {
+    fn run(&mut self, input: &[u8]) -> RunResult;
+}
+
 fn signal_name(signal: i32) -> &'static str {
     match signal {
         4 => "SIGILL",
@@ -132,6 +136,18 @@ impl ExternalTarget {
                 Err(e) => return RunResult::HarnessError(e.to_string()),
             }
         }
+    }
+}
+
+impl Executor for ExternalTarget {
+    fn run(&mut self, input: &[u8]) -> RunResult {
+        ExternalTarget::run(self, input)
+    }
+}
+
+impl Executor for &ExternalTarget {
+    fn run(&mut self, input: &[u8]) -> RunResult {
+        ExternalTarget::run(self, input)
     }
 }
 

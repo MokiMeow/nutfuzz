@@ -11,7 +11,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use crate::dictionary::Dictionary;
-use crate::exec::{ExternalTarget, RunResult};
+use crate::exec::{Executor, ExternalTarget, RunResult};
 use crate::fuzzer::render;
 use crate::mutate::havoc;
 use crate::rng::Rng;
@@ -55,6 +55,15 @@ pub fn fuzz_external(
     seeds: &[Vec<u8>],
     config: &ExternalConfig,
 ) -> ExternalReport {
+    let mut target = target;
+    fuzz_executor(&mut target, seeds, config)
+}
+
+pub fn fuzz_executor(
+    target: &mut dyn Executor,
+    seeds: &[Vec<u8>],
+    config: &ExternalConfig,
+) -> ExternalReport {
     let corpus = if seeds.is_empty() {
         vec![b"A".to_vec()]
     } else {
@@ -91,7 +100,7 @@ pub fn fuzz_external(
                     continue;
                 };
                 if seen.insert(key) {
-                    let minimised = minimise_external(target, &candidate, &result);
+                    let minimised = minimise_executor(target, &candidate, &result);
                     findings.push(ExternalFinding {
                         input: candidate,
                         minimised,
@@ -119,10 +128,19 @@ pub fn minimise_external(
     input: &[u8],
     expected: &RunResult,
 ) -> Vec<u8> {
+    let mut target = target;
+    minimise_executor(&mut target, input, expected)
+}
+
+pub fn minimise_executor(
+    target: &mut dyn Executor,
+    input: &[u8],
+    expected: &RunResult,
+) -> Vec<u8> {
     let Some(expected_key) = finding_key(expected) else {
         return input.to_vec();
     };
-    let preserves = |candidate: &[u8]| {
+    let mut preserves = |candidate: &[u8]| {
         finding_key(&target.run(candidate))
             .map(|key| key == expected_key)
             .unwrap_or(false)
