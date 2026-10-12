@@ -65,6 +65,23 @@ that each correct magic byte uncovers a *new* edge.
 The failure mode is worth internalising: a broken coverage map does not crash
 or error: the fuzzer just quietly stops finding things.
 
+## Sparse coverage collection
+
+The 64 KiB counter map stays in place, but the in-process recorder also keeps
+an unsorted list of the indices touched during the current execution. Each edge
+is recorded once in that list, even when its hit counter is incremented many
+times. Reset clears only those indices instead of all 65,536 counters.
+
+Snapshots sort just the touched indices before applying the same hit-count
+bucket rules. That preserves the exact ascending order and coverage signatures
+used by the original full-map scan, so deterministic seeded runs are unchanged.
+`edges_hit()` also reads the tracked cardinality instead of scanning the map.
+
+The change is about low-overhead coverage bookkeeping, not a different
+coverage heuristic. To measure a host's throughput of short synthetic runs,
+use `cargo run --release --example coverage-overhead`; compare its executions
+per second across Git revisions on the same machine.
+
 ## Hit-count bucketing
 
 Counts are bucketed (1, 2, 3, 4–7, 8–15, 16–31, 32–127, 128+) so that "this

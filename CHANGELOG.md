@@ -4,6 +4,16 @@ All notable changes to nutfuzz are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Track touched coverage-map edges so per-execution reset and snapshots no
+  longer scan all 65,536 counters. Preserve ascending snapshot order, hit-count
+  buckets, deterministic crash signatures, and the existing public API.
+- Add sparse-versus-full snapshot regression tests, reset/reuse coverage, and
+  a dependency-free synthetic throughput benchmark.
+
 ## [1.2.1]: 2026-07-31
 
 ### Fixed
