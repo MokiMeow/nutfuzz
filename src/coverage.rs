@@ -14,6 +14,10 @@
 //! This is AFL's scheme, and it is used here for the same reason: it is one
 //! integer of work per branch.
 //!
+//! A run usually visits only a small portion of the 64 KiB map. We track
+//! touched indices for O(visited edges) reset and avoid a full-map scan when
+//! creating snapshots. Snapshots remain sorted by index for determinism.
+//!
 //! How targets report edges: production fuzzers get these callbacks from the
 //! compiler (`-fsanitize-coverage=trace-pc-guard`). nutfuzz's in-process
 //! targets call [`Coverage::trace`] by hand. External binaries currently run
@@ -42,6 +46,8 @@ fn bucket(count: u32) -> u8 {
 /// Per-execution edge recorder.
 pub struct Coverage {
     counts: Vec<u32>,
+    // Only edges observed in the current execution need reset/snapshot work.
+    touched: Vec<usize>,
     prev: usize,
 }
 
@@ -55,6 +61,7 @@ impl Coverage {
     pub fn new() -> Self {
         Self {
             counts: vec![0; MAP_SIZE],
+            touched: Vec::new(),
             prev: 0,
         }
     }
@@ -71,6 +78,9 @@ impl Coverage {
     pub fn trace(&mut self, location: usize) {
         let spread = Self::spread(location);
         let index = (spread ^ self.prev) % MAP_SIZE;
+        if self.counts[index] == 0 {
+            self.touched.push(index);
+        }
         self.counts[index] = self.counts[index].saturating_add(1);
         self.prev = (spread >> 1) % MAP_SIZE;
     }
@@ -82,25 +92,28 @@ impl Coverage {
     }
 
     pub fn reset(&mut self) {
-        for c in self.counts.iter_mut() {
-            *c = 0;
+        for &index in &self.touched {
+            self.counts[index] = 0;
         }
+        self.touched.clear();
         self.prev = 0;
     }
 
-    /// Bucketed snapshot of this run, as (index, bucket) pairs. Sparse because
-    /// a single execution touches a tiny fraction of a 64 KiB map.
+    /// Bucketed snapshot as sorted (index, bucket) pairs.
+    ///
+    /// Sorting is essential: crash signatures and seeded fuzz campaigns depend
+    /// on the stable ascending order used by the original full-map scan.
     pub fn snapshot(&self) -> Vec<(usize, u8)> {
-        self.counts
-            .iter()
-            .enumerate()
-            .filter(|(_, &c)| c > 0)
-            .map(|(i, &c)| (i, bucket(c)))
+        let mut edges = self.touched.clone();
+        edges.sort_unstable();
+        edges
+            .into_iter()
+            .map(|index| (index, bucket(self.counts[index])))
             .collect()
     }
 
     pub fn edges_hit(&self) -> usize {
-        self.counts.iter().filter(|&&c| c > 0).count()
+        self.touched.len()
     }
 }
 
@@ -264,5 +277,51 @@ mod tests {
         let mut c = Coverage::new();
         c.trace(9);
         assert_ne!(signature(&a.snapshot()), signature(&c.snapshot()));
+    }
+
+    #[test]
+    fn sparse_snapshots_match_full_bitmap_scans() {
+        let mut coverage = Coverage::new();
+
+        for sequence in [
+            &[1usize, 2, 2, 3, 8, 8, 8, 8][..],
+            &[200, 1, 200, 50, 77, 99, 11, 11][..],
+            &[0, 10, 1000, 65535, 10, 65535][..],
+        ] {
+            for &location in sequence {
+                coverage.trace(location);
+            }
+            let reference: Vec<_> = coverage
+                .counts
+                .iter()
+                .enumerate()
+                .filter_map(|(index, &count)| {
+                    (count != 0).then_some((index, super::bucket(count)))
+                })
+                .collect();
+
+            assert_eq!(coverage.snapshot(), reference);
+            assert_eq!(coverage.edges_hit(), reference.len());
+            coverage.reset();
+            assert!(coverage.snapshot().is_empty());
+            assert_eq!(coverage.edges_hit(), 0);
+        }
+    }
+
+    #[test]
+    fn resetting_a_reused_recorder_matches_a_fresh_one() {
+        let mut reused = Coverage::new();
+        for location in [10, 20, 30, 10, 20, 30] {
+            reused.trace(location);
+        }
+        reused.reset();
+
+        let mut fresh = Coverage::new();
+        for location in [30, 50, 30, 90, 50] {
+            reused.trace(location);
+            fresh.trace(location);
+        }
+        assert_eq!(reused.snapshot(), fresh.snapshot());
+        assert_eq!(super::signature(&reused.snapshot()), super::signature(&fresh.snapshot()));
     }
 }
