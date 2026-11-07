@@ -330,23 +330,37 @@ mod tests {
         for (name, exit) in [("clean", "exit 0"), ("crash", "kill -SEGV $$")] {
             let marker = std::env::temp_dir()
                 .join(format!("nutfuzz-descendant-{name}-{}", std::process::id()));
+            let release = marker.with_extension("release");
             let _ = std::fs::remove_file(&marker);
-            let script = format!("(sleep .2; printf leaked > \"$1\") & {exit}");
+            let _ = std::fs::remove_file(&release);
+            // A slow parent (including crash handling) can still be alive
+            // after a fixed delay. Only let the descendant write after run()
+            // returns, when process-group cleanup must have completed.
+            // Bound the fixture's wait even if cleanup regresses or we abort.
+            let script = format!(
+                "(attempts=0; while [ ! -e \"$2\" ]; do \
+                 [ \"$attempts\" -lt 500 ] || exit 0; \
+                 attempts=$((attempts + 1)); sleep .01; done; \
+                 printf leaked > \"$1\") & sleep .3; {exit}"
+            );
             let target = ExternalTarget::new("/bin/sh").with_args(vec![
                 "-c".into(),
                 script,
                 "nutfuzz-test".into(),
                 marker.to_string_lossy().into_owned(),
+                release.to_string_lossy().into_owned(),
             ]);
             let result = target.run(b"");
+            std::fs::write(&release, b"").unwrap();
+            std::thread::sleep(Duration::from_millis(400));
+            let leaked = marker.exists();
+            let _ = std::fs::remove_file(marker);
+            let _ = std::fs::remove_file(release);
             if name == "clean" {
                 assert_eq!(result, RunResult::Exited(0));
             } else {
                 assert!(result.is_crash(), "{result:?}");
             }
-            std::thread::sleep(Duration::from_millis(400));
-            let leaked = marker.exists();
-            let _ = std::fs::remove_file(marker);
             assert!(!leaked, "descendant survived its {name} parent");
         }
     }
