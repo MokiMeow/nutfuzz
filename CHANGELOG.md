@@ -4,6 +4,51 @@ All notable changes to nutfuzz are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Enforce one deadline over complete forkserver handshakes and request/reply
+  exchanges, including partial frames, slow peers, and blocked writes.
+- Discard and reap failed forkserver handshakes before attempting recovery.
+- Reject oversize protocol writes before allocating their encoded body.
+- Terminate ordinary process-group descendants after clean and crashed target
+  exits, as well as wait errors and timeouts.
+- Publish finding artifacts atomically from fresh private files instead of
+  following/truncating destination symlinks or modifying hardlinked files.
+- Preserve the original coverage signature while minimizing an in-process
+  finding, and report the reduced input's own diagnostic on CLI replay.
+- Report progress when stability checks or trimming cross an update interval.
+- Preserve all CLI search options in shell-quoted replay commands, including
+  dictionaries, grammar, fixups, and scheduling.
+- Retain exactly the checked fixed-up corpus bytes during trimming without a
+  second fixup application or length-subtraction underflow.
+
+### Performance
+
+- Track touched coverage counters to avoid full-map scans for sparse executions,
+  with bounded bookkeeping and dense fallback above 4,096 distinct edges.
+  Retain canonical snapshot ordering and signatures.
+- Add a reproducible dense-reference recorder benchmark including high-
+  occupancy workloads; no universal search-speed claim is made.
+
+### Measured
+
+- Ten identical seeded `parse_nested` campaigns matched baseline findings,
+  discovery iterations, inputs, and coverage while reducing median local wall
+  time from 7.325 s to 0.08495 s. This is an owned synthetic workload, not a
+  universal speed claim. Raw campaign and recorder samples are included.
+
+### Tests and documentation
+
+- Add regression coverage for partial/trickled frames, blocked writes, invalid
+  handshakes followed by recovery, protocol size boundaries, artifact links and
+  permissions, descendant cleanup, crash identity, and growing fixups.
+- Run formatting, warning-denied Clippy, debug tests, and public doctests in CI
+  alongside release validation using the official Rust toolchain.
+- Document process-isolation limits, controlled artifact directories, and the
+  protocol's header-adjusted maximum input length.
+
 ## [1.2.1]: 2026-07-31
 
 ### Fixed

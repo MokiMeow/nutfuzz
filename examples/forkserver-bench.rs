@@ -6,8 +6,7 @@ use nutfuzz::forkserver::ForkserverTarget;
 fn main() {
     const RUNS: u64 = 1_000;
 
-    let direct = ExternalTarget::new("/bin/true")
-        .with_timeout(Duration::from_millis(500));
+    let direct = ExternalTarget::new("/bin/true").with_timeout(Duration::from_millis(500));
     let started = Instant::now();
     for _ in 0..RUNS {
         let _ = direct.run(b"AAAAAAA");
@@ -17,8 +16,7 @@ fn main() {
     let path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "target/release/nutfuzz-forkserver-target".into());
-    let mut forkserver =
-        ForkserverTarget::spawn(path, Duration::from_millis(500)).unwrap();
+    let mut forkserver = ForkserverTarget::spawn(path, Duration::from_millis(500)).unwrap();
     let started = Instant::now();
     for _ in 0..RUNS {
         let _ = forkserver.run_with_coverage(b"AAAAAAA");
@@ -27,10 +25,7 @@ fn main() {
 
     println!("runs              {RUNS}");
     println!("exec per run      {:.3}s", direct_elapsed.as_secs_f64());
-    println!(
-        "local forkserver  {:.3}s",
-        forkserver_elapsed.as_secs_f64()
-    );
+    println!("local forkserver  {:.3}s", forkserver_elapsed.as_secs_f64());
     println!(
         "speedup           {:.2}x",
         direct_elapsed.as_secs_f64() / forkserver_elapsed.as_secs_f64()

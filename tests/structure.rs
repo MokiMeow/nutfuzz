@@ -26,9 +26,6 @@ fn json_grammar_always_emits_balanced_objects() {
             input.iter().filter(|&&byte| byte == b'{').count(),
             input.iter().filter(|&&byte| byte == b'}').count()
         );
-        assert_eq!(
-            input.iter().filter(|&&byte| byte == b'"').count() % 2,
-            0
-        );
+        assert_eq!(input.iter().filter(|&&byte| byte == b'"').count() % 2, 0);
     }
 }

@@ -114,3 +114,15 @@ way: only the source of the callbacks differs.
 
 - [AFL technical whitepaper](https://lcamtuf.coredump.cx/afl/technical_details.txt)
 - libFuzzer documentation: value profiles and comparison tracing.
+
+## Sparse recorder bookkeeping
+
+Sparse executions keep a list of counters touched at least once. Reset visits
+only that list, and `edges_hit` returns its length. After 4,097 distinct edges,
+the recorder stops growing the list and uses dense scans for reset, snapshots,
+and edge counts until the next reset. This avoids sorting large dense maps and
+bounds the extra bookkeeping. Snapshot pairs remain sorted by edge index, so
+hit buckets, signatures, and deterministic corpus decisions are unchanged. Dense-reference differential tests cover random traces,
+repeated hits, saturation, and full-map occupancy. Use the focused
+`coverage-bench` example to measure recorder overhead on both sparse and dense
+workloads; it does not measure bug-finding effectiveness.

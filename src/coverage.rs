@@ -18,8 +18,13 @@
 //! compiler (`-fsanitize-coverage=trace-pc-guard`). nutfuzz's in-process
 //! targets call [`Coverage::trace`] by hand. External binaries currently run
 //! blind; compiler instrumentation plus a shared map remains future work.
+//!
+//! Only edges touched in the current execution need clearing or bucketing.
+//! Keep their indices alongside the dense counters, then sort snapshots by
+//! index to preserve the original deterministic corpus and crash signatures.
 
 pub const MAP_SIZE: usize = 1 << 16; // 64 KiB, as AFL uses
+const SPARSE_LIMIT: usize = MAP_SIZE / 16;
 
 /// Hit counts are bucketed so that "this loop ran 11 times instead of 10" is
 /// not treated as new coverage, while "ran twice instead of once" is. Without
@@ -42,6 +47,9 @@ fn bucket(count: u32) -> u8 {
 /// Per-execution edge recorder.
 pub struct Coverage {
     counts: Vec<u32>,
+    // First-touch order, capped once dense scanning becomes cheaper. When
+    // len exceeds SPARSE_LIMIT, subsequent indices are intentionally omitted.
+    touched: Vec<usize>,
     prev: usize,
 }
 
@@ -55,6 +63,7 @@ impl Coverage {
     pub fn new() -> Self {
         Self {
             counts: vec![0; MAP_SIZE],
+            touched: Vec::new(),
             prev: 0,
         }
     }
@@ -71,6 +80,9 @@ impl Coverage {
     pub fn trace(&mut self, location: usize) {
         let spread = Self::spread(location);
         let index = (spread ^ self.prev) % MAP_SIZE;
+        if self.touched.len() <= SPARSE_LIMIT && self.counts[index] == 0 {
+            self.touched.push(index);
+        }
         self.counts[index] = self.counts[index].saturating_add(1);
         self.prev = (spread >> 1) % MAP_SIZE;
     }
@@ -82,25 +94,47 @@ impl Coverage {
     }
 
     pub fn reset(&mut self) {
-        for c in self.counts.iter_mut() {
-            *c = 0;
+        if self.touched.len() > SPARSE_LIMIT {
+            // Sequential clearing wins once enough scattered counters are hot.
+            self.counts.fill(0);
+        } else {
+            for &index in &self.touched {
+                self.counts[index] = 0;
+            }
         }
+        self.touched.clear();
         self.prev = 0;
     }
 
     /// Bucketed snapshot of this run, as (index, bucket) pairs. Sparse because
-    /// a single execution touches a tiny fraction of a 64 KiB map.
+    /// a single execution usually touches a tiny fraction of the map.
+    /// Pairs are always ordered by index, regardless of first-touch order.
     pub fn snapshot(&self) -> Vec<(usize, u8)> {
-        self.counts
+        if self.touched.len() > SPARSE_LIMIT {
+            // Dense traces should not pay O(edges log edges) sorting cost.
+            return self
+                .counts
+                .iter()
+                .enumerate()
+                .filter(|(_, &count)| count > 0)
+                .map(|(index, &count)| (index, bucket(count)))
+                .collect();
+        }
+        let mut snapshot: Vec<_> = self
+            .touched
             .iter()
-            .enumerate()
-            .filter(|(_, &c)| c > 0)
-            .map(|(i, &c)| (i, bucket(c)))
-            .collect()
+            .map(|&i| (i, bucket(self.counts[i])))
+            .collect();
+        snapshot.sort_unstable_by_key(|&(i, _)| i);
+        snapshot
     }
 
     pub fn edges_hit(&self) -> usize {
-        self.counts.iter().filter(|&&c| c > 0).count()
+        if self.touched.len() > SPARSE_LIMIT {
+            self.counts.iter().filter(|&&count| count > 0).count()
+        } else {
+            self.touched.len()
+        }
     }
 }
 
@@ -180,7 +214,180 @@ pub fn signature(snapshot: &[(usize, u8)]) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{signature, Coverage, GlobalMap};
+    use super::{bucket, signature, Coverage, GlobalMap, MAP_SIZE};
+    use crate::rng::Rng;
+
+    // Independent copy of the previous dense implementation. Do not reuse
+    // Coverage::trace/reset/snapshot: these are the operations under test.
+    struct DenseReference {
+        counts: Vec<u32>,
+        prev: usize,
+    }
+
+    impl DenseReference {
+        fn new() -> Self {
+            Self {
+                counts: vec![0; MAP_SIZE],
+                prev: 0,
+            }
+        }
+
+        fn trace(&mut self, location: usize) {
+            let spread = location.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 16;
+            let index = (spread ^ self.prev) % MAP_SIZE;
+            self.counts[index] = self.counts[index].saturating_add(1);
+            self.prev = (spread >> 1) % MAP_SIZE;
+        }
+
+        fn reset(&mut self) {
+            self.counts.fill(0);
+            self.prev = 0;
+        }
+
+        fn snapshot(&self) -> Vec<(usize, u8)> {
+            self.counts
+                .iter()
+                .enumerate()
+                .filter(|(_, &c)| c > 0)
+                .map(|(i, &c)| (i, bucket(c)))
+                .collect()
+        }
+    }
+
+    fn assert_matches_dense(sparse: &Coverage, dense: &DenseReference) {
+        let expected = dense.snapshot();
+        let actual = sparse.snapshot();
+        assert_eq!(actual, expected);
+        assert!(actual.windows(2).all(|pair| pair[0].0 < pair[1].0));
+        assert_eq!(sparse.edges_hit(), expected.len());
+        assert_eq!(signature(&actual), signature(&expected));
+        assert_eq!(sparse.counts, dense.counts);
+        assert_eq!(sparse.prev, dense.prev);
+        // Reading snapshots must not change the recorder or ordering.
+        assert_eq!(sparse.snapshot(), actual);
+    }
+
+    #[test]
+    fn sparse_matches_dense_across_seeded_traces_and_resets() {
+        for seed in [0, 1, 42, 123456789, u64::MAX] {
+            let mut rng = Rng::new(seed);
+            let mut sparse = Coverage::new();
+            let mut dense = DenseReference::new();
+            let mut sparse_global = GlobalMap::new();
+            let mut dense_global = GlobalMap::new();
+            for run in 0..100 {
+                let length = if run % 10 == 0 { 0 } else { rng.below(2048) };
+                for step in 0..length {
+                    let location = match step % 4 {
+                        0 => 0,
+                        1 => rng.below(16),
+                        _ => rng.next_u64() as usize,
+                    };
+                    sparse.trace(location);
+                    dense.trace(location);
+                    if step % 257 == 0 {
+                        assert_matches_dense(&sparse, &dense);
+                    }
+                }
+                assert_matches_dense(&sparse, &dense);
+                let actual = sparse.snapshot();
+                let expected = dense.snapshot();
+                assert_eq!(
+                    sparse_global.would_be_interesting(&actual),
+                    dense_global.would_be_interesting(&expected)
+                );
+                assert_eq!(sparse_global.merge(&actual), dense_global.merge(&expected));
+                assert_eq!(sparse_global.seen, dense_global.seen);
+                assert_eq!(sparse_global.edges_found(), dense_global.edges_found());
+                sparse.reset();
+                dense.reset();
+                assert_matches_dense(&sparse, &dense);
+                sparse.reset(); // Empty resets must also be harmless.
+                assert_matches_dense(&sparse, &dense);
+            }
+        }
+    }
+
+    #[test]
+    fn repeated_hits_are_unique_across_bucket_boundaries_and_saturation() {
+        let mut sparse = Coverage::new();
+        let mut dense = DenseReference::new();
+        // Location zero repeatedly hits index zero, including the first hit.
+        for hits in 1..=256 {
+            sparse.trace(0);
+            dense.trace(0);
+            assert_matches_dense(&sparse, &dense);
+            assert_eq!(sparse.touched, [0]);
+            assert_eq!(sparse.snapshot(), [(0, bucket(hits))]);
+        }
+        // Reach saturation without billions of callbacks.
+        sparse.counts[0] = u32::MAX - 1;
+        dense.counts[0] = u32::MAX - 1;
+        for _ in 0..3 {
+            sparse.trace(0);
+            dense.trace(0);
+            assert_matches_dense(&sparse, &dense);
+            assert_eq!(sparse.touched, [0]);
+        }
+        assert_eq!(sparse.counts[0], u32::MAX);
+        sparse.reset();
+        dense.reset();
+        sparse.trace(0);
+        dense.trace(0);
+        assert_matches_dense(&sparse, &dense);
+        assert_eq!(sparse.snapshot(), [(0, 1)]);
+    }
+
+    #[test]
+    fn dense_occupancy_and_reverse_touch_order_remain_sorted() {
+        let mut sparse = Coverage::new();
+        let mut dense = DenseReference::new();
+        // Construct every possible edge index, without relying on random
+        // traces eventually covering the whole map.
+        for index in (0..MAP_SIZE).rev() {
+            sparse.prev = index;
+            dense.prev = index;
+            sparse.trace(0);
+            dense.trace(0);
+        }
+        assert_eq!(sparse.edges_hit(), MAP_SIZE);
+        assert_matches_dense(&sparse, &dense);
+        sparse.reset();
+        dense.reset();
+        assert_matches_dense(&sparse, &dense);
+    }
+
+    #[test]
+    fn sparse_to_dense_transition_preserves_counts_and_resets() {
+        for size in [
+            super::SPARSE_LIMIT - 1,
+            super::SPARSE_LIMIT,
+            super::SPARSE_LIMIT + 1,
+            super::SPARSE_LIMIT + 2,
+            super::SPARSE_LIMIT * 2,
+        ] {
+            let mut sparse = Coverage::new();
+            let mut dense = DenseReference::new();
+            for index in (0..size).rev() {
+                sparse.prev = index;
+                dense.prev = index;
+                sparse.trace(0);
+                dense.trace(0);
+            }
+            assert_matches_dense(&sparse, &dense);
+            for location in (0..300).chain(std::iter::repeat_n(0, 300)) {
+                sparse.trace(location);
+                dense.trace(location);
+            }
+            assert_matches_dense(&sparse, &dense);
+            assert!(sparse.touched.len() <= super::SPARSE_LIMIT + 1);
+            sparse.reset();
+            dense.reset();
+            sparse.trace(1);
+            dense.trace(1);
+            assert_matches_dense(&sparse, &dense);
+        }
+    }
 
     #[test]
     fn distinguishes_edges_not_just_blocks() {
@@ -203,7 +410,10 @@ mod tests {
         cov.trace(1);
         cov.trace(2);
 
-        assert!(global.merge(&cov.snapshot()), "first sighting is interesting");
+        assert!(
+            global.merge(&cov.snapshot()),
+            "first sighting is interesting"
+        );
         assert!(!global.merge(&cov.snapshot()), "the same path is not");
     }
 

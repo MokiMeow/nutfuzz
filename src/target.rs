@@ -134,22 +134,40 @@ pub fn parse_nested(data: &[u8], cov: &mut Coverage) -> Outcome {
     }
     cov.trace(22);
 
-    if data[0] != b'F' { cov.trace(23); return Outcome::Ok; }
-    cov.trace(24);                                   // gate 1
-    if data[1] != b'U' { cov.trace(25); return Outcome::Ok; }
-    cov.trace(26);                                   // gate 2
-    if data[2] != b'Z' { cov.trace(27); return Outcome::Ok; }
-    cov.trace(28);                                   // gate 3
-    if data[3] != b'Z' { cov.trace(29); return Outcome::Ok; }
-    cov.trace(30);                                   // gate 4
+    if data[0] != b'F' {
+        cov.trace(23);
+        return Outcome::Ok;
+    }
+    cov.trace(24); // gate 1
+    if data[1] != b'U' {
+        cov.trace(25);
+        return Outcome::Ok;
+    }
+    cov.trace(26); // gate 2
+    if data[2] != b'Z' {
+        cov.trace(27);
+        return Outcome::Ok;
+    }
+    cov.trace(28); // gate 3
+    if data[3] != b'Z' {
+        cov.trace(29);
+        return Outcome::Ok;
+    }
+    cov.trace(30); // gate 4
 
-    if data[4] != 0x02 { cov.trace(31); return Outcome::Ok; }
-    cov.trace(32);                                   // gate 5
-    if data[5] != 0x42 { cov.trace(33); return Outcome::Ok; }
-    cov.trace(34);                                   // gate 6
+    if data[4] != 0x02 {
+        cov.trace(31);
+        return Outcome::Ok;
+    }
+    cov.trace(32); // gate 5
+    if data[5] != 0x42 {
+        cov.trace(33);
+        return Outcome::Ok;
+    }
+    cov.trace(34); // gate 6
 
     if data[6] as usize > 200 {
-        cov.trace(35);                               // gate 7 — the bug
+        cov.trace(35); // gate 7 — the bug
         return Outcome::Crash(format!(
             "integer overflow: size {} exceeds the 200-byte buffer",
             data[6]
@@ -172,7 +190,7 @@ pub fn parse_magic(data: &[u8], cov: &mut Coverage) -> Outcome {
     cov.trace(42);
     if &data[0..4] != b"FUZZ" {
         cov.trace(43);
-        return Outcome::Ok;   // no partial credit — coverage learns nothing
+        return Outcome::Ok; // no partial credit — coverage learns nothing
     }
     cov.trace(44);
     if data[4] as usize > 200 {
@@ -290,11 +308,31 @@ mod tests {
 
     #[test]
     fn nested_bug_needs_every_gate() {
-        assert_eq!(run(parse_nested, b"FUZZ\x02\x42\x10"), Outcome::Ok, "size too small");
-        assert_eq!(run(parse_nested, b"FUZZ\x02\x00\xff"), Outcome::Ok, "wrong mode");
-        assert_eq!(run(parse_nested, b"FUZZ\x01\x42\xff"), Outcome::Ok, "wrong version");
-        assert_eq!(run(parse_nested, b"XUZZ\x02\x42\xff"), Outcome::Ok, "wrong magic byte 0");
-        assert_eq!(run(parse_nested, b"FXZZ\x02\x42\xff"), Outcome::Ok, "wrong magic byte 1");
+        assert_eq!(
+            run(parse_nested, b"FUZZ\x02\x42\x10"),
+            Outcome::Ok,
+            "size too small"
+        );
+        assert_eq!(
+            run(parse_nested, b"FUZZ\x02\x00\xff"),
+            Outcome::Ok,
+            "wrong mode"
+        );
+        assert_eq!(
+            run(parse_nested, b"FUZZ\x01\x42\xff"),
+            Outcome::Ok,
+            "wrong version"
+        );
+        assert_eq!(
+            run(parse_nested, b"XUZZ\x02\x42\xff"),
+            Outcome::Ok,
+            "wrong magic byte 0"
+        );
+        assert_eq!(
+            run(parse_nested, b"FXZZ\x02\x42\xff"),
+            Outcome::Ok,
+            "wrong magic byte 1"
+        );
 
         match run(parse_nested, b"FUZZ\x02\x42\xff") {
             Outcome::Crash(m) => assert!(m.contains("overflow")),
@@ -315,8 +353,10 @@ mod tests {
         let one = edges(b"FXXXXXX");
         let two = edges(b"FUXXXXX");
         let three = edges(b"FUZXXXX");
-        assert!(one > none && two > one && three > two,
-                "each correct byte must uncover a new edge ({none} {one} {two} {three})");
+        assert!(
+            one > none && two > one && three > two,
+            "each correct byte must uncover a new edge ({none} {one} {two} {three})"
+        );
     }
 
     #[test]
@@ -327,9 +367,12 @@ mod tests {
             parse_magic(input, &mut cov);
             cov.edges_hit()
         };
-        assert_eq!(edges(b"XXXXX"), edges(b"FUZXX"),
-                   "a single memcmp leaks no progress — this is the blind spot \
-                    that dictionaries exist to cover");
+        assert_eq!(
+            edges(b"XXXXX"),
+            edges(b"FUZXX"),
+            "a single memcmp leaks no progress — this is the blind spot \
+                    that dictionaries exist to cover"
+        );
     }
 
     #[test]

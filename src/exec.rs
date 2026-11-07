@@ -124,7 +124,12 @@ impl ExternalTarget {
         let started = Instant::now();
         loop {
             match child.try_wait() {
-                Ok(Some(status)) => return classify(status),
+                Ok(Some(status)) => {
+                    // A target may exit while its descendants keep running.
+                    // Cleanup is required for every outcome, not only hangs.
+                    terminate(&mut child);
+                    return classify(status);
+                }
                 Ok(None) => {
                     if started.elapsed() > self.timeout {
                         terminate(&mut child);
@@ -133,7 +138,11 @@ impl ExternalTarget {
                     }
                     std::thread::sleep(Duration::from_millis(1));
                 }
-                Err(e) => return RunResult::HarnessError(e.to_string()),
+                Err(e) => {
+                    terminate(&mut child);
+                    let _ = child.wait();
+                    return RunResult::HarnessError(e.to_string());
+                }
             }
         }
     }
@@ -152,7 +161,7 @@ impl Executor for &ExternalTarget {
 }
 
 #[cfg(unix)]
-fn configure_process_group(command: &mut Command) {
+pub(crate) fn configure_process_group(command: &mut Command) {
     use std::os::unix::process::CommandExt;
 
     unsafe {
@@ -167,10 +176,10 @@ fn configure_process_group(command: &mut Command) {
 }
 
 #[cfg(not(unix))]
-fn configure_process_group(_command: &mut Command) {}
+pub(crate) fn configure_process_group(_command: &mut Command) {}
 
 #[cfg(unix)]
-fn terminate(child: &mut std::process::Child) {
+pub(crate) fn terminate(child: &mut std::process::Child) {
     const SIGKILL: i32 = 9;
     let process_group = -(child.id() as i32);
     unsafe {
@@ -180,7 +189,7 @@ fn terminate(child: &mut std::process::Child) {
 }
 
 #[cfg(not(unix))]
-fn terminate(child: &mut std::process::Child) {
+pub(crate) fn terminate(child: &mut std::process::Child) {
     let _ = child.kill();
 }
 
@@ -201,10 +210,8 @@ impl InputFile {
     fn create(input: &[u8]) -> std::io::Result<(File, Self)> {
         for _ in 0..32 {
             let id = NEXT_INPUT_ID.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "nutfuzz-stdin-{}-{id}",
-                std::process::id()
-            ));
+            let path =
+                std::env::temp_dir().join(format!("nutfuzz-stdin-{}-{id}", std::process::id()));
             let mut options = OpenOptions::new();
             options.read(true).write(true).create_new(true);
             #[cfg(unix)]
@@ -303,7 +310,10 @@ mod tests {
         let target = ExternalTarget::new("/definitely/not/a/real/binary");
         let result = target.run(b"");
         assert!(matches!(result, RunResult::HarnessError(_)));
-        assert!(!result.is_crash(), "a broken harness must never look like a bug");
+        assert!(
+            !result.is_crash(),
+            "a broken harness must never look like a bug"
+        );
     }
 
     #[test]
@@ -314,13 +324,38 @@ mod tests {
         assert_eq!(target.run(&vec![b'x'; 1024 * 1024]), RunResult::Hang);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn descendants_cannot_outlive_a_clean_or_crashed_target() {
+        for (name, exit) in [("clean", "exit 0"), ("crash", "kill -SEGV $$")] {
+            let marker = std::env::temp_dir()
+                .join(format!("nutfuzz-descendant-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_file(&marker);
+            let script = format!("(sleep .2; printf leaked > \"$1\") & {exit}");
+            let target = ExternalTarget::new("/bin/sh").with_args(vec![
+                "-c".into(),
+                script,
+                "nutfuzz-test".into(),
+                marker.to_string_lossy().into_owned(),
+            ]);
+            let result = target.run(b"");
+            if name == "clean" {
+                assert_eq!(result, RunResult::Exited(0));
+            } else {
+                assert!(result.is_crash(), "{result:?}");
+            }
+            std::thread::sleep(Duration::from_millis(400));
+            let leaked = marker.exists();
+            let _ = std::fs::remove_file(marker);
+            assert!(!leaked, "descendant survived its {name} parent");
+        }
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn file_size_limit_stops_unbounded_output() {
-        let output = std::env::temp_dir().join(format!(
-            "nutfuzz-limit-test-{}",
-            std::process::id()
-        ));
+        let output =
+            std::env::temp_dir().join(format!("nutfuzz-limit-test-{}", std::process::id()));
         let script = format!(
             "dd if=/dev/zero of={} bs=1024 count=16 2>/dev/null",
             output.display()
@@ -333,7 +368,9 @@ mod tests {
             });
 
         let result = target.run(b"");
-        let size = std::fs::metadata(&output).map(|meta| meta.len()).unwrap_or(0);
+        let size = std::fs::metadata(&output)
+            .map(|meta| meta.len())
+            .unwrap_or(0);
         let _ = std::fs::remove_file(output);
         assert_ne!(result, RunResult::Exited(0));
         assert!(size <= 1_024, "limited file grew to {size} bytes");

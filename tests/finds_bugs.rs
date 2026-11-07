@@ -35,7 +35,11 @@ fn crashes(input: &[u8]) -> bool {
 
 #[test]
 fn finds_the_planted_bug() {
-    let report = fuzz(target::parse_record, &seeds(), &config(0xC0FFEE, 300_000, true));
+    let report = fuzz(
+        target::parse_record,
+        &seeds(),
+        &config(0xC0FFEE, 300_000, true),
+    );
     assert!(
         !report.findings.is_empty(),
         "failed to find the planted bug in {} executions",
@@ -49,12 +53,23 @@ fn finds_the_planted_bug() {
 
 #[test]
 fn the_same_seed_reproduces_the_same_run() {
-    let a = fuzz(target::parse_record, &seeds(), &config(424_242, 100_000, true));
-    let b = fuzz(target::parse_record, &seeds(), &config(424_242, 100_000, true));
+    let a = fuzz(
+        target::parse_record,
+        &seeds(),
+        &config(424_242, 100_000, true),
+    );
+    let b = fuzz(
+        target::parse_record,
+        &seeds(),
+        &config(424_242, 100_000, true),
+    );
 
     assert_eq!(a.executions, b.executions);
     assert_eq!(a.findings.len(), b.findings.len());
-    assert_eq!(a.corpus_size, b.corpus_size, "the corpus must evolve identically");
+    assert_eq!(
+        a.corpus_size, b.corpus_size,
+        "the corpus must evolve identically"
+    );
     if let (Some(x), Some(y)) = (a.findings.first(), b.findings.first()) {
         assert_eq!(x.input, y.input, "the reproducer must be identical");
         assert_eq!(x.iteration, y.iteration);
@@ -90,7 +105,11 @@ fn reports_nothing_when_there_is_nothing_to_find() {
 
 #[test]
 fn minimised_reproducer_is_small_and_still_crashes() {
-    let report = fuzz(target::parse_record, &seeds(), &config(0xBEEF, 300_000, true));
+    let report = fuzz(
+        target::parse_record,
+        &seeds(),
+        &config(0xBEEF, 300_000, true),
+    );
     let finding = report.findings.first().expect("should find the bug");
 
     let small = minimise(target::parse_record, &finding.input);
@@ -140,5 +159,71 @@ fn coverage_is_actually_recorded() {
     assert!(
         report.edges_found > 0,
         "a guided campaign must record edges — zero means the feedback is dead"
+    );
+}
+
+#[test]
+fn minimisation_preserves_the_original_coverage_signature() {
+    fn two_paths(input: &[u8], cov: &mut Coverage) -> Outcome {
+        cov.trace(if input.len() >= 2 { 1 } else { 2 });
+        Outcome::Crash("shared crash message".into())
+    }
+
+    let original = b"original reproducer";
+    let mut original_coverage = Coverage::new();
+    let _ = two_paths(original, &mut original_coverage);
+    let small = minimise(two_paths, original);
+    let mut small_coverage = Coverage::new();
+    let _ = two_paths(&small, &mut small_coverage);
+    assert_eq!(small.len(), 2);
+    assert_eq!(
+        nutfuzz::coverage::signature(&small_coverage.snapshot()),
+        nutfuzz::coverage::signature(&original_coverage.snapshot())
+    );
+}
+
+#[test]
+fn corpus_trimming_does_not_reapply_a_length_growing_fixup() {
+    fn length_coverage(input: &[u8], cov: &mut Coverage) -> Outcome {
+        cov.trace(input.len());
+        Outcome::Ok
+    }
+    fn append_trailer(input: &mut Vec<u8>) {
+        input.extend_from_slice(&[0xff; 100]);
+    }
+
+    let report = fuzz(
+        length_coverage,
+        &[b"A".to_vec()],
+        &Config {
+            seed: 1,
+            max_iterations: 1,
+            stability_runs: 1,
+            trim_corpus: true,
+            fixup: Some(append_trailer),
+            ..Config::default()
+        },
+    );
+    assert_eq!(report.stability.checks, 1, "exercise corpus admission");
+    assert_eq!(report.corpus_size, 2);
+    assert_eq!(report.trimmed_bytes, 0);
+    assert!(report.findings.is_empty());
+}
+
+#[test]
+fn minimisation_allows_changed_diagnostics_with_the_same_signature() {
+    let original = b"REC\x07\xffpayload";
+    let mut original_coverage = Coverage::new();
+    let original_outcome = target::parse_record(original, &mut original_coverage);
+    assert!(matches!(&original_outcome, Outcome::Crash(_)));
+    let small = minimise(target::parse_record, original);
+    let mut small_coverage = Coverage::new();
+    let small_outcome = target::parse_record(&small, &mut small_coverage);
+    assert!(matches!(&small_outcome, Outcome::Crash(_)));
+    assert_ne!(small_outcome, original_outcome);
+    assert_eq!(small.len(), 5);
+    assert_eq!(
+        nutfuzz::coverage::signature(&small_coverage.snapshot()),
+        nutfuzz::coverage::signature(&original_coverage.snapshot())
     );
 }

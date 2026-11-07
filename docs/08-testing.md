@@ -7,8 +7,20 @@ RUSTFLAGS=-Dwarnings cargo build --release --all-targets
 RUSTFLAGS=-Dwarnings cargo test --release --all-targets
 ```
 
-The current suite has 82 passing tests. `cargo fmt` and `cargo clippy` are
-additional gates when their optional Rust components are installed.
+Also run debug-mode tests to expose arithmetic overflow and doctests to check
+public examples:
+
+```bash
+RUSTFLAGS=-Dwarnings cargo test --all-targets
+RUSTFLAGS=-Dwarnings cargo test --doc
+```
+
+Formatting and lint checks also run in CI:
+
+```bash
+cargo fmt --all --check
+cargo clippy --all-targets -- -D warnings
+```
 
 ## Evidence groups
 
@@ -19,7 +31,14 @@ additional gates when their optional Rust components are installed.
 | `finds_bugs` | findings, minimisation, replay, corrected-target silence |
 | `external_cli` | CLI parsing, clean programs, limits, harness failures |
 | `structure` | harvesting, delimiter preservation, balanced JSON |
-| `forkserver` | protocol bounds, versions, coverage, crash and timeout recovery |
+| `forkserver` | complete-frame deadlines, trickled bytes, invalid restarts, protocol limits |
+
+Unit tests also exercise blocked socket writes, artifact symlink/hardlink
+replacement, restored private permissions, failed-publication cleanup, and
+ordinary descendant cleanup after clean/crashed leaders. In-process
+regressions cover preserving crash coverage identity during minimization and
+length-growing fixups during corpus trimming. These use only owned synthetic
+fixtures and local benign processes.
 
 ## Deterministic campaign check
 

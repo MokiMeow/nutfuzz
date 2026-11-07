@@ -37,12 +37,7 @@ pub fn generate(grammar: Grammar, rng: &mut Rng) -> Vec<u8> {
         Grammar::Json => {
             const KEYS: [&str; 4] = ["name", "enabled", "count", "mode"];
             const VALUES: [&str; 5] = ["true", "false", "null", "0", "\"fuzz\""];
-            format!(
-                "{{\"{}\":{}}}",
-                rng.pick(&KEYS),
-                rng.pick(&VALUES)
-            )
-            .into_bytes()
+            format!("{{\"{}\":{}}}", rng.pick(&KEYS), rng.pick(&VALUES)).into_bytes()
         }
     }
 }
@@ -58,19 +53,20 @@ pub fn mutate_token(input: &mut Vec<u8>, dictionary: &Dictionary, rng: &mut Rng)
         return;
     }
 
-    let replacement_is_literal =
-        matches!(replacement.as_slice(), b"true" | b"false" | b"null");
+    let replacement_is_literal = matches!(replacement.as_slice(), b"true" | b"false" | b"null");
     let matching: Vec<(usize, usize)> = if replacement_is_literal {
         runs.iter()
             .copied()
-            .filter(|&(start, end)| {
-                matches!(&input[start..end], b"true" | b"false" | b"null")
-            })
+            .filter(|&(start, end)| matches!(&input[start..end], b"true" | b"false" | b"null"))
             .collect()
     } else {
         Vec::new()
     };
-    let choices = if matching.is_empty() { &runs } else { &matching };
+    let choices = if matching.is_empty() {
+        &runs
+    } else {
+        &matching
+    };
     let &(start, end) = rng.pick(choices);
 
     let new_len = input.len() - (end - start) + replacement.len();

@@ -28,6 +28,19 @@ TargetFn(input, Coverage)
 Every random choice draws from one seeded `Rng`. Guided mode schedules the
 growing corpus; blind mode mutates only the original seeds.
 
+Corpus trimming retains the exact fixed-up bytes whose coverage was checked.
+It does not apply the fixup a second time to the retained result: user-provided
+fixups need not be idempotent. A trim trial that grows beyond the original
+candidate length is rejected, and failed trials leave the original candidate
+unchanged.
+
+Crash minimisation preserves the original edge-coverage signature, matching the
+campaign's deduplication identity. Input-dependent diagnostics may change as
+bytes are removed. It is a greedy deletion search, not a guarantee of the
+globally smallest reproducer. Coverage is a heuristic identity: distinct bugs
+may share the same edge set, and bitmap or signature collisions can merge
+unrelated paths. Signature preservation is not proof of a shared root cause.
+
 ## External execution
 
 The reference path creates an `ExternalTarget` for each candidate execution:
@@ -36,7 +49,7 @@ The reference path creates an `ExternalTarget` for each candidate execution:
 2. spawn the target in a new Unix process group;
 3. apply Linux resource limits before `exec`;
 4. poll until exit or timeout;
-5. kill the process group on timeout;
+5. kill the process group on every terminal outcome;
 6. classify the result and minimize unique findings.
 
 `Executor` is the campaign boundary. `ExternalTarget` implements it for
@@ -58,8 +71,11 @@ client                         persistent harness
 ```
 
 Frames are limited to 64 KiB and carry an explicit protocol version. The worker
-uses a dedicated pipe and `_exit`. A client timeout kills the harness process
-group, including its worker, and the next request starts a clean harness.
+uses a dedicated pipe and `_exit`. The client's stdin/stdout transport uses
+local Unix sockets so writes and complete frame reads share a deadline,
+including partial frames. A client timeout kills the harness process group,
+including its worker, and the next request starts a clean harness. Process
+ownership is RAII-based: handshake errors and target destruction also reap it.
 
 ## Components
 

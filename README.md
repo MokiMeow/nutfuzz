@@ -9,7 +9,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Rust-2021-orange" alt="Rust 2021">
   <img src="https://img.shields.io/badge/dependencies-none-brightgreen" alt="No dependencies">
-  <img src="https://img.shields.io/badge/tests-82%20passing-brightgreen" alt="82 passing tests">
+  <img src="https://github.com/MokiMeow/nutfuzz/actions/workflows/ci.yml/badge.svg" alt="Build and tests">
   <img src="https://img.shields.io/badge/release-v1.2.1-blue" alt="v1.2.1">
   <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT">
 </p>
@@ -73,6 +73,17 @@ On the local WSL2 environment, 1,000 executions measured by
 That is a measured 7.82x speedup for this synthetic comparison. Results vary by
 host and target.
 
+### Coverage bookkeeping
+
+On a local cloud host, ten identical `parse_nested` campaigns (seeds 1-10,
+300,000-iteration budget) fell from a median **7.325 s to 0.08495 s** after
+avoiding full coverage-map scans on sparse executions. Both versions found the
+same bugs on the same iterations with identical finding inputs and coverage.
+This is an approximately 86x improvement for this synthetic workload, not a
+universal fuzzing-speed claim. Dense workloads use a bounded fallback.
+
+See [methodology, raw samples, and limitations](docs/11-hardening.md#measurements-on-2026-11-07).
+
 ## Features
 
 - Deterministic xorshift64* random generator and replayable campaign seeds.
@@ -88,8 +99,10 @@ host and target.
 - Crash deduplication and greedy reproducer minimisation.
 - External process crash, exit, hang, and harness-error classification.
 - Linux process-group cleanup and `setrlimit` controls.
-- Private deterministic crash artifacts and sorted seed-corpus loading.
-- A framed, versioned, bounded local forkserver protocol with timeout recovery.
+- Atomic private crash artifacts that do not follow destination symlinks.
+- Deterministic artifact names and sorted seed-corpus loading.
+- A framed, versioned, bounded local forkserver protocol with full-exchange
+  deadlines and timeout recovery.
 - An opt-in AFL++ comparison that only compiles the included synthetic target.
 
 ## Architecture
@@ -176,7 +189,7 @@ at [docs/assets/campaign.cast](docs/assets/campaign.cast).
 
 ## Testing
 
-The release suite contains 82 tests covering:
+The regression suite covers:
 
 - mutation totality on empty, one-byte, and maximum-size inputs;
 - deterministic random generation, scheduling, campaigns, and artifacts;
@@ -229,6 +242,7 @@ clean external program.
 - [Testing](docs/08-testing.md)
 - [Limitations](docs/09-limitations.md)
 - [Disclosure and authorization](docs/10-disclosure.md)
+- [Hardening research and boundaries](docs/11-hardening.md)
 - [Roadmap](docs/04-roadmap.md)
 - [Milestone specifications](docs/milestones/README.md)
 - [Changelog](CHANGELOG.md)

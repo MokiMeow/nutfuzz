@@ -13,7 +13,14 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install Rust
-        run: sudo apt-get update && sudo apt-get install -y cargo rustc
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+
+      - name: Formatting and Clippy
+        run: |
+          cargo fmt --all --check
+          cargo clippy --all-targets -- -D warnings
 
       - name: Build (warnings are failures)
         env:
@@ -24,6 +31,13 @@ jobs:
         env:
           RUSTFLAGS: -Dwarnings
         run: cargo test --release --all-targets
+
+      - name: Debug tests and public examples
+        env:
+          RUSTFLAGS: -Dwarnings
+        run: |
+          cargo test --all-targets
+          cargo test --doc
 
       - name: Markdown punctuation policy
         run: |

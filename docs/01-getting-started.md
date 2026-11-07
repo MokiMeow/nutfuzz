@@ -90,6 +90,15 @@ It must report 20 executions and no crashes or hangs. Read
 - `reason` records the owned target message or external result class.
 - `signature` groups in-process paths by root-cause coverage.
 - `input` is the original candidate with non-printable bytes escaped.
-- `minimised` is the smallest candidate retained by greedy deletion.
+- `minimised` is the smallest candidate retained by greedy deletion. For
+  in-process targets, each accepted deletion must preserve the original crash
+  coverage signature. The original `reason` is retained, and `min reason`
+  reports the diagnostic observed when rerunning the minimised bytes.
 - `replay` records the target, seed, and budget required to reproduce the
   campaign.
+
+Printed `replay` commands preserve the original search options, quote them for
+a POSIX shell, and pin the seed and required mutation budget. Keep the same
+binary version for reproducible replay; elapsed time and throughput vary by
+host. `min reason` is the diagnostic produced by the reduced bytes, which can
+differ from the original input's length-dependent diagnostic.

@@ -17,9 +17,7 @@ use crate::coverage::{signature, Coverage, GlobalMap};
 use crate::dictionary::Dictionary;
 use crate::mutate::havoc;
 use crate::rng::Rng;
-use crate::structure::{
-    generate, harvest_tokens, mutate_token, FixupFn, Grammar,
-};
+use crate::structure::{generate, harvest_tokens, mutate_token, FixupFn, Grammar};
 use crate::target::{Outcome, TargetFn};
 use crate::trim::trim_coverage;
 
@@ -166,6 +164,7 @@ where
     let mut first_crash_at = None;
     let mut stability = Stability::default();
     let mut trimmed_bytes = 0usize;
+    let mut next_progress = config.progress_interval;
 
     for iteration in 0..config.max_iterations {
         // Choose a parent. Guided mode schedules over the growing corpus;
@@ -186,10 +185,9 @@ where
             Mode::Blind => initial[rng.below(initial.len())].clone(),
         };
 
-        if config.grammar.is_some() && rng.one_in(8) {
-            candidate = generate(config.grammar.expect("grammar exists"), &mut rng);
-        } else {
-            havoc(&mut candidate, &donor, &mut rng);
+        match config.grammar {
+            Some(grammar) if rng.one_in(8) => candidate = generate(grammar, &mut rng),
+            _ => havoc(&mut candidate, &donor, &mut rng),
         }
         if !dictionary.is_empty() && rng.one_in(4) {
             if rng.one_in(3) {
@@ -226,19 +224,29 @@ where
                 if config.trim_corpus {
                     let original_len = admitted.len();
                     let mut trim_coverage_map = Coverage::new();
-                    admitted = trim_coverage(&admitted, |trial| {
+                    let mut retained = admitted.clone();
+                    let _ = trim_coverage(&admitted, |trial| {
                         let mut trial = trial.to_vec();
                         if let Some(fixup) = config.fixup {
                             fixup(&mut trial);
                         }
+                        // Keep the exact fixed-up bytes that were checked.
+                        // Fixups may grow inputs or be non-idempotent, so
+                        // applying one again after trimming is not safe.
+                        if trial.len() > original_len {
+                            return false;
+                        }
                         trim_coverage_map.reset();
                         let _ = target(&trial, &mut trim_coverage_map);
                         executions += 1;
-                        trim_coverage_map.snapshot() == snapshot
+                        if trim_coverage_map.snapshot() == snapshot {
+                            retained = trial;
+                            true
+                        } else {
+                            false
+                        }
                     });
-                    if let Some(fixup) = config.fixup {
-                        fixup(&mut admitted);
-                    }
+                    admitted = retained;
                     trimmed_bytes += original_len - admitted.len();
                 }
                 if config.auto_dictionary {
@@ -247,10 +255,7 @@ where
                     }
                 }
                 global.merge(&snapshot);
-                corpus.add(
-                    admitted,
-                    snapshot.iter().map(|&(index, _)| index).collect(),
-                );
+                corpus.add(admitted, snapshot.iter().map(|&(index, _)| index).collect());
             } else {
                 stability.unstable_inputs += 1;
             }
@@ -264,8 +269,8 @@ where
             // Deduplicate by coverage signature, not by bytes: one bug reached
             // ten ways is one bug, and reporting it ten times is how fuzzers
             // drown the person who has to fix them.
-            if !seen_signatures.contains_key(&sig) {
-                seen_signatures.insert(sig, findings.len());
+            if let std::collections::hash_map::Entry::Vacant(entry) = seen_signatures.entry(sig) {
+                entry.insert(findings.len());
                 findings.push(Finding {
                     input: candidate,
                     message,
@@ -278,9 +283,11 @@ where
             }
         }
 
-        if config.progress_interval > 0
-            && executions % config.progress_interval == 0
-        {
+        if config.progress_interval > 0 && executions >= next_progress {
+            // Stability checks and trimming may cross an interval without
+            // landing exactly on it. Report the actual count once per batch.
+            next_progress = executions
+                .saturating_add(config.progress_interval - executions % config.progress_interval);
             on_progress(&Progress {
                 executions,
                 corpus_size: corpus.len(),
@@ -311,17 +318,20 @@ where
 ///
 /// A 4 KiB reproducer says almost nothing; a 6-byte one says exactly which
 /// bytes matter. Greedy: try deleting a chunk, keep the deletion whenever the
-/// crash survives, then halve the chunk size and repeat.
+/// crash survives with the same coverage signature, then halve the chunk size
+/// and repeat. This uses the campaign's crash identity, allowing diagnostics
+/// containing input-dependent details to change as the input shrinks.
 pub fn minimise(target: TargetFn, input: &[u8]) -> Vec<u8> {
     let mut cov = Coverage::new();
-    let crashes = |bytes: &[u8], cov: &mut Coverage| {
+    let Outcome::Crash(_) = target(input, &mut cov) else {
+        return input.to_vec();
+    };
+    let original_signature = signature(&cov.snapshot());
+    let preserves_finding = |bytes: &[u8], cov: &mut Coverage| {
         cov.reset();
         matches!(target(bytes, cov), Outcome::Crash(_))
+            && signature(&cov.snapshot()) == original_signature
     };
-
-    if !crashes(input, &mut cov) {
-        return input.to_vec();
-    }
 
     let mut best = input.to_vec();
     let mut chunk = best.len() / 2;
@@ -332,7 +342,7 @@ pub fn minimise(target: TargetFn, input: &[u8]) -> Vec<u8> {
             let end = (position + chunk).min(best.len());
             let mut trial = best.clone();
             trial.drain(position..end);
-            if !trial.is_empty() && crashes(&trial, &mut cov) {
+            if !trial.is_empty() && preserves_finding(&trial, &mut cov) {
                 best = trial;
             } else {
                 position += chunk;

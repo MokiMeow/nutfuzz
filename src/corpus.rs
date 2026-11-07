@@ -100,7 +100,7 @@ impl Corpus {
                     continue;
                 }
                 let gain = entry.edges.iter().filter(|e| !covered.contains(e)).count();
-                if gain > 0 && best.map_or(true, |(_, b)| gain > b) {
+                if gain > 0 && best.is_none_or(|(_, b)| gain > b) {
                     best = Some((i, gain));
                 }
             }
@@ -142,8 +142,7 @@ impl Corpus {
         }
         let index = self.round_robin % self.entries.len();
         self.round_robin = (index + 1) % self.entries.len();
-        self.entries[index].picked =
-            self.entries[index].picked.saturating_add(1);
+        self.entries[index].picked = self.entries[index].picked.saturating_add(1);
         Some(index)
     }
 
@@ -160,8 +159,7 @@ impl Corpus {
         if self.entries.is_empty() {
             return 0.0;
         }
-        self.entries.iter().map(|e| e.input.len()).sum::<usize>() as f64
-            / self.entries.len() as f64
+        self.entries.iter().map(|e| e.input.len()).sum::<usize>() as f64 / self.entries.len() as f64
     }
 }
 
@@ -173,10 +171,10 @@ mod tests {
     #[test]
     fn favoured_is_a_minimal_covering_set() {
         let mut corpus = Corpus::new();
-        corpus.add(b"a".to_vec(), vec![1, 2, 3]);  // covers everything below
-        corpus.add(b"b".to_vec(), vec![1, 2]);     // redundant
-        corpus.add(b"c".to_vec(), vec![3]);        // redundant
-        corpus.add(b"d".to_vec(), vec![9]);        // unique edge
+        corpus.add(b"a".to_vec(), vec![1, 2, 3]); // covers everything below
+        corpus.add(b"b".to_vec(), vec![1, 2]); // redundant
+        corpus.add(b"c".to_vec(), vec![3]); // redundant
+        corpus.add(b"d".to_vec(), vec![9]); // unique edge
 
         assert_eq!(
             corpus.favoured_count(),
@@ -203,8 +201,8 @@ mod tests {
     #[test]
     fn small_inputs_get_more_energy_than_large_ones() {
         let mut corpus = Corpus::new();
-        corpus.add(vec![0u8; 8], vec![1]);      // small
-        corpus.add(vec![0u8; 4096], vec![2]);   // bloated
+        corpus.add(vec![0u8; 8], vec![1]); // small
+        corpus.add(vec![0u8; 4096], vec![2]); // bloated
 
         let mut rng = Rng::new(7);
         let mut small = 0;
@@ -213,7 +211,10 @@ mod tests {
                 small += 1;
             }
         }
-        assert!(small > 2400, "the small entry should dominate, got {small}/4000");
+        assert!(
+            small > 2400,
+            "the small entry should dominate, got {small}/4000"
+        );
     }
 
     #[test]

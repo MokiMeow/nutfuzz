@@ -52,12 +52,7 @@ fn external_cli_applies_resource_limits() {
 #[test]
 fn missing_external_program_is_a_harness_failure_not_a_finding() {
     let output = Command::new(env!("CARGO_BIN_EXE_nutfuzz"))
-        .args([
-            "--external",
-            "/not/a/real/program",
-            "--iterations",
-            "1",
-        ])
+        .args(["--external", "/not/a/real/program", "--iterations", "1"])
         .output()
         .expect("run nutfuzz");
     assert!(!output.status.success());
@@ -144,4 +139,51 @@ fn local_cli_accepts_structured_mutation_options() {
     assert!(stdout.contains("auto dict  enabled"));
     assert!(stdout.contains("grammar    json"));
     assert!(stdout.contains("fixup      checksum"));
+}
+
+#[cfg(unix)]
+#[test]
+fn structured_finding_replay_keeps_dictionary_and_fixup() {
+    let binary = env!("CARGO_BIN_EXE_nutfuzz");
+    let output = Command::new(binary)
+        .args([
+            "--target",
+            "parse_checksum",
+            "--dict",
+            "CHECK",
+            "--fixup",
+            "checksum",
+            "--seed",
+            "41",
+            "--iterations",
+            "2000",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let replay = stdout
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("replay    "))
+        .expect("checksum campaign must find its planted bug");
+    assert!(replay.contains("'--dict' 'CHECK'"));
+    assert!(replay.contains("'--fixup' 'checksum'"));
+    let executable = format!("'{}'", binary.replace('\'', "'\"'\"'"));
+    let replay = format!("{executable}{}", replay.strip_prefix("nutfuzz").unwrap());
+    let repeated = Command::new("/bin/sh")
+        .args(["-c", &replay])
+        .output()
+        .unwrap();
+    assert!(repeated.status.success());
+    let repeated = String::from_utf8(repeated.stdout).unwrap();
+    for prefix in ["iteration", "signature", "minimised"] {
+        let original = stdout
+            .lines()
+            .find(|line| line.split_whitespace().next() == Some(prefix))
+            .unwrap();
+        assert!(
+            repeated.lines().any(|line| line == original),
+            "{prefix} changed on replay"
+        );
+    }
 }

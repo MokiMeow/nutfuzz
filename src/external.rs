@@ -9,6 +9,9 @@ use std::collections::BTreeSet;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT_ARTIFACT_ID: AtomicU64 = AtomicU64::new(0);
 
 use crate::dictionary::Dictionary;
 use crate::exec::{Executor, ExternalTarget, RunResult};
@@ -123,20 +126,12 @@ pub fn fuzz_executor(
     }
 }
 
-pub fn minimise_external(
-    target: &ExternalTarget,
-    input: &[u8],
-    expected: &RunResult,
-) -> Vec<u8> {
+pub fn minimise_external(target: &ExternalTarget, input: &[u8], expected: &RunResult) -> Vec<u8> {
     let mut target = target;
     minimise_executor(&mut target, input, expected)
 }
 
-pub fn minimise_executor(
-    target: &mut dyn Executor,
-    input: &[u8],
-    expected: &RunResult,
-) -> Vec<u8> {
+pub fn minimise_executor(target: &mut dyn Executor, input: &[u8], expected: &RunResult) -> Vec<u8> {
     let Some(expected_key) = finding_key(expected) else {
         return input.to_vec();
     };
@@ -184,7 +179,14 @@ pub fn write_artifacts(
     path: impl AsRef<Path>,
     report: &ExternalReport,
 ) -> io::Result<Vec<PathBuf>> {
-    fs::create_dir_all(path.as_ref())?;
+    let mut directories = fs::DirBuilder::new();
+    directories.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        directories.mode(0o700);
+    }
+    directories.create(path.as_ref())?;
     let mut written = Vec::new();
     for finding in &report.findings {
         let key = finding_key(&finding.result).ok_or_else(|| {
@@ -218,16 +220,47 @@ pub fn write_artifacts(
     Ok(written)
 }
 
+/// Publish a fresh private inode by rename. Opening the deterministic final
+/// name with truncate would follow symlinks, alter hardlink targets, and retain
+/// permissive modes on pre-existing files. Never open that name for writing.
 fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let mut options = OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "artifact has no parent"))?;
+    for _ in 0..32 {
+        let id = NEXT_ARTIFACT_ID.fetch_add(1, Ordering::Relaxed);
+        let temporary = parent.join(format!(".nutfuzz-artifact-{}-{id}.tmp", std::process::id()));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = match options.open(&temporary) {
+            Ok(file) => file,
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        };
+        let temporary = PendingArtifact(temporary);
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temporary.0, path)?;
+        return Ok(());
     }
-    let mut file = options.open(path)?;
-    file.write_all(bytes)
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "could not reserve a private artifact file",
+    ))
+}
+
+struct PendingArtifact(PathBuf);
+
+impl Drop for PendingArtifact {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
 }
 
 fn finding_key(result: &RunResult) -> Option<String> {
@@ -322,14 +355,55 @@ mod tests {
         }
     }
 
+    #[test]
+    fn artifact_publication_replaces_links_without_touching_their_targets() {
+        use std::os::unix::fs::symlink;
+        let directory = TempDir::new("artifact-links");
+        let victim = directory.0.join("unrelated");
+        fs::write(&victim, b"must remain unchanged").unwrap();
+        let artifact = directory.0.join("finding.bin");
+        symlink(&victim, &artifact).unwrap();
+        super::write_private(&artifact, b"private finding").unwrap();
+        assert_eq!(fs::read(&victim).unwrap(), b"must remain unchanged");
+        assert!(!fs::symlink_metadata(&artifact)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        fs::remove_file(&artifact).unwrap();
+        fs::hard_link(&victim, &artifact).unwrap();
+        super::write_private(&artifact, b"next finding").unwrap();
+        assert_eq!(fs::read(&victim).unwrap(), b"must remain unchanged");
+        assert_eq!(fs::read(&artifact).unwrap(), b"next finding");
+    }
+
+    #[test]
+    fn replacing_public_artifacts_restores_private_permissions() {
+        let directory = TempDir::new("artifact-mode");
+        let artifact = directory.0.join("finding.bin");
+        fs::write(&artifact, b"previous").unwrap();
+        fs::set_permissions(&artifact, fs::Permissions::from_mode(0o644)).unwrap();
+        super::write_private(&artifact, b"private").unwrap();
+        assert_eq!(
+            fs::metadata(&artifact).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(fs::read(&artifact).unwrap(), b"private");
+    }
+
+    #[test]
+    fn failed_publication_leaves_no_partial_artifact() {
+        let directory = TempDir::new("artifact-failure");
+        let destination = directory.0.join("occupied");
+        fs::create_dir(&destination).unwrap();
+        assert!(super::write_private(&destination, b"finding").is_err());
+        assert_eq!(fs::read_dir(&directory.0).unwrap().count(), 1);
+    }
+
     struct TempDir(PathBuf);
 
     impl TempDir {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!(
-                "nutfuzz-{name}-{}",
-                std::process::id()
-            ));
+            let path = std::env::temp_dir().join(format!("nutfuzz-{name}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&path);
             fs::create_dir_all(&path).unwrap();
             Self(path)

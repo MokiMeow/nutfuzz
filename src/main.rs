@@ -12,14 +12,11 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use nutfuzz::exec::ExternalTarget;
-use nutfuzz::fuzzer::{
-    fuzz, fuzz_with_progress, minimise, render, Config, Mode, Schedule,
-};
-use nutfuzz::{
-    fuzz_external, load_corpus, target, write_artifacts, Dictionary, ExternalConfig,
-    ResourceLimits,
-};
+use nutfuzz::fuzzer::{fuzz, fuzz_with_progress, minimise, render, Config, Mode, Schedule};
 use nutfuzz::structure::Grammar;
+use nutfuzz::{
+    fuzz_external, load_corpus, target, write_artifacts, Dictionary, ExternalConfig, ResourceLimits,
+};
 
 fn main() -> ExitCode {
     let mut config = Config::default();
@@ -88,8 +85,7 @@ fn main() -> ExitCode {
                 i += 1;
                 match args.get(i).and_then(|value| value.parse::<u64>().ok()) {
                     Some(value) if value > 0 => {
-                        resource_limits.address_space_bytes =
-                            value.checked_mul(1024 * 1024);
+                        resource_limits.address_space_bytes = value.checked_mul(1024 * 1024);
                         if resource_limits.address_space_bytes.is_none() {
                             return fail("--memory-mb is too large");
                         }
@@ -100,23 +96,15 @@ fn main() -> ExitCode {
             "--cpu-seconds" => {
                 i += 1;
                 match args.get(i).and_then(|value| value.parse::<u64>().ok()) {
-                    Some(value) if value > 0 => {
-                        resource_limits.cpu_seconds = Some(value)
-                    }
+                    Some(value) if value > 0 => resource_limits.cpu_seconds = Some(value),
                     _ => return fail("--cpu-seconds needs a positive number"),
                 }
             }
             "--file-size-bytes" => {
                 i += 1;
                 match args.get(i).and_then(|value| value.parse::<u64>().ok()) {
-                    Some(value) if value > 0 => {
-                        resource_limits.file_size_bytes = Some(value)
-                    }
-                    _ => {
-                        return fail(
-                            "--file-size-bytes needs a positive number",
-                        )
-                    }
+                    Some(value) if value > 0 => resource_limits.file_size_bytes = Some(value),
+                    _ => return fail("--file-size-bytes needs a positive number"),
                 }
             }
             "--mode" => {
@@ -131,22 +119,14 @@ fn main() -> ExitCode {
                 i += 1;
                 match args.get(i).map(String::as_str) {
                     Some("weighted") => config.schedule = Schedule::Weighted,
-                    Some("round-robin") => {
-                        config.schedule = Schedule::RoundRobin
-                    }
-                    _ => {
-                        return fail(
-                            "--schedule needs 'weighted' or 'round-robin'",
-                        )
-                    }
+                    Some("round-robin") => config.schedule = Schedule::RoundRobin,
+                    _ => return fail("--schedule needs 'weighted' or 'round-robin'"),
                 }
             }
             "--progress" => {
                 i += 1;
                 match args.get(i).and_then(|value| value.parse::<u64>().ok()) {
-                    Some(value) if value > 0 => {
-                        config.progress_interval = value
-                    }
+                    Some(value) if value > 0 => config.progress_interval = value,
                     _ => return fail("--progress needs a positive number"),
                 }
             }
@@ -154,11 +134,7 @@ fn main() -> ExitCode {
                 i += 1;
                 match args.get(i).and_then(|value| value.parse::<u8>().ok()) {
                     Some(value) if value > 0 => config.stability_runs = value,
-                    _ => {
-                        return fail(
-                            "--stability-runs needs a positive number up to 255",
-                        )
-                    }
+                    _ => return fail("--stability-runs needs a positive number up to 255"),
                 }
             }
             "--trim" => config.trim_corpus = true,
@@ -214,16 +190,11 @@ fn main() -> ExitCode {
     }
 
     if let Some(program) = external_program {
-        return run_external(
-            program,
-            external_args,
-            corpus_path,
-            artifact_path,
-            timeout_ms,
-            iterations_set,
-            config,
-            resource_limits,
-        );
+        let target = ExternalTarget::new(program)
+            .with_args(external_args)
+            .with_timeout(Duration::from_millis(timeout_ms))
+            .with_limits(resource_limits);
+        return run_external(target, corpus_path, artifact_path, iterations_set, config);
     }
 
     let Some(target_fn) = target::by_name(&target_name) else {
@@ -235,10 +206,13 @@ fn main() -> ExitCode {
 
     println!("nutfuzz — coverage-guided fuzzing\n");
     println!("  target     {target_name}");
-    println!("  mode       {}", match config.mode {
-        Mode::Guided => "guided (coverage feedback)",
-        Mode::Blind => "blind (no feedback)",
-    });
+    println!(
+        "  mode       {}",
+        match config.mode {
+            Mode::Guided => "guided (coverage feedback)",
+            Mode::Blind => "blind (no feedback)",
+        }
+    );
     println!("  seed       {}", config.seed);
     println!("  iterations {}", config.max_iterations);
     println!(
@@ -251,11 +225,19 @@ fn main() -> ExitCode {
     println!("  stability  {} runs", config.stability_runs);
     println!(
         "  trimming   {}",
-        if config.trim_corpus { "enabled" } else { "disabled" }
+        if config.trim_corpus {
+            "enabled"
+        } else {
+            "disabled"
+        }
     );
     println!(
         "  auto dict  {}",
-        if config.auto_dictionary { "enabled" } else { "disabled" }
+        if config.auto_dictionary {
+            "enabled"
+        } else {
+            "disabled"
+        }
     );
     if let Some(grammar) = config.grammar {
         println!(
@@ -312,27 +294,42 @@ fn main() -> ExitCode {
         println!("    iteration {}", finding.iteration);
         println!("    reason    {}", finding.message);
         println!("    signature {:016x}", finding.signature);
-        println!("    input     {} bytes  \"{}\"", finding.input.len(), render(&finding.input));
-        println!("    minimised {} bytes  \"{}\"", small.len(), render(&small));
         println!(
-            "    replay    nutfuzz --target {} --seed {} --iterations {}\n",
-            target_name,
-            report.seed,
-            finding.iteration + 1
+            "    input     {} bytes  \"{}\"",
+            finding.input.len(),
+            render(&finding.input)
+        );
+        println!(
+            "    minimised {} bytes  \"{}\"",
+            small.len(),
+            render(&small)
+        );
+        let mut reduced_coverage = nutfuzz::Coverage::new();
+        match target_fn(&small, &mut reduced_coverage) {
+            target::Outcome::Crash(message) => {
+                println!("    min reason {message}");
+                if nutfuzz::coverage::signature(&reduced_coverage.snapshot()) != finding.signature {
+                    println!("    warning   minimised replay changed coverage signature");
+                }
+            }
+            target::Outcome::Ok => {
+                println!("    warning   minimised input did not crash on replay");
+            }
+        }
+        println!(
+            "    replay    {}\n",
+            replay_command(&args, config.seed, finding.iteration)
         );
     }
     ExitCode::SUCCESS
 }
 
 fn run_external(
-    program: String,
-    args: Vec<String>,
+    target: ExternalTarget,
     corpus_path: Option<String>,
     artifact_path: String,
-    timeout_ms: u64,
     iterations_set: bool,
     config: Config,
-    resource_limits: ResourceLimits,
 ) -> ExitCode {
     let seeds = match corpus_path {
         Some(path) => match load_corpus(&path) {
@@ -347,10 +344,6 @@ fn run_external(
     } else {
         1_000
     };
-    let target = ExternalTarget::new(&program)
-        .with_args(args)
-        .with_timeout(Duration::from_millis(timeout_ms))
-        .with_limits(resource_limits);
     let external_config = ExternalConfig {
         seed: config.seed,
         max_iterations,
@@ -359,17 +352,17 @@ fn run_external(
     };
 
     println!("nutfuzz — deterministic external campaign\n");
-    println!("  program    {program}");
+    println!("  program    {}", target.program);
     println!("  seed       {}", external_config.seed);
     println!("  iterations {}", external_config.max_iterations);
-    println!("  timeout    {timeout_ms} ms");
-    if let Some(bytes) = resource_limits.address_space_bytes {
+    println!("  timeout    {} ms", target.timeout.as_millis());
+    if let Some(bytes) = target.limits.address_space_bytes {
         println!("  memory     {} MiB", bytes / (1024 * 1024));
     }
-    if let Some(seconds) = resource_limits.cpu_seconds {
+    if let Some(seconds) = target.limits.cpu_seconds {
         println!("  cpu        {seconds} s");
     }
-    if let Some(bytes) = resource_limits.file_size_bytes {
+    if let Some(bytes) = target.limits.file_size_bytes {
         println!("  file size  {bytes} bytes");
     }
     println!("  corpus     {} seed(s)\n", seeds.len());
@@ -396,7 +389,10 @@ fn run_external(
         );
     }
     match write_artifacts(&artifact_path, &report) {
-        Ok(paths) => println!("  wrote {} artifact file(s) to {artifact_path}", paths.len()),
+        Ok(paths) => println!(
+            "  wrote {} artifact file(s) to {artifact_path}",
+            paths.len()
+        ),
         Err(error) => return fail(&format!("write artifacts: {error}")),
     }
     ExitCode::SUCCESS
@@ -493,4 +489,43 @@ fn fail(message: &str) -> ExitCode {
          \x20              [--timeout-ms N] [--artifacts DIR] [--bench] [--list]"
     );
     ExitCode::FAILURE
+}
+
+/// Preserve every search option, then pin the effective seed and the budget
+/// needed for this finding. Shell quoting keeps dictionary bytes and spaces
+/// from becoming a different command when the replay is copied into a shell.
+fn replay_command(args: &[String], seed: u64, iteration: u64) -> String {
+    let mut command = String::from("nutfuzz");
+    for argument in args {
+        command.push(' ');
+        command.push_str(&shell_quote(argument));
+    }
+    command.push_str(&format!(
+        " --seed {seed} --iterations {}",
+        iteration.saturating_add(1)
+    ));
+    command
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{replay_command, shell_quote};
+
+    #[test]
+    fn replay_retains_options_and_quotes_shell_metacharacters() {
+        let command = replay_command(
+            &["--dict".into(), "a'b; $(false)".into(), "--trim".into()],
+            41,
+            8,
+        );
+        assert_eq!(
+            command,
+            "nutfuzz '--dict' 'a'\"'\"'b; $(false)' '--trim' --seed 41 --iterations 9"
+        );
+        assert_eq!(shell_quote(""), "''");
+    }
 }

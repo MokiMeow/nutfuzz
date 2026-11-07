@@ -59,9 +59,7 @@ fn run_worker(input: &[u8]) -> nutfuzz::protocol::ForkserverReply {
         let outcome = nutfuzz::target::parse_nested(input, &mut coverage);
         let result = match outcome {
             nutfuzz::Outcome::Ok => RunResult::Exited(0),
-            nutfuzz::Outcome::Crash(message) => {
-                RunResult::Crashed(11, message)
-            }
+            nutfuzz::Outcome::Crash(message) => RunResult::Crashed(11, message),
         };
         let reply = ForkserverReply {
             result,

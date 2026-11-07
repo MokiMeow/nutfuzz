@@ -13,11 +13,18 @@ use crate::rng::Rng;
 /// Values that disproportionately trigger bugs: boundaries, overflow points,
 /// and sign-flip points at each width.
 const INTERESTING_8: [u8; 9] = [0x00, 0x01, 0x10, 0x20, 0x40, 0x7f, 0x80, 0xfe, 0xff];
-const INTERESTING_16: [u16; 8] =
-    [0x0000, 0x0001, 0x007f, 0x0080, 0x00ff, 0x7fff, 0x8000, 0xffff];
+const INTERESTING_16: [u16; 8] = [
+    0x0000, 0x0001, 0x007f, 0x0080, 0x00ff, 0x7fff, 0x8000, 0xffff,
+];
 const INTERESTING_32: [u32; 8] = [
-    0x0000_0000, 0x0000_0001, 0x0000_7fff, 0x0000_8000,
-    0x0000_ffff, 0x7fff_ffff, 0x8000_0000, 0xffff_ffff,
+    0x0000_0000,
+    0x0000_0001,
+    0x0000_7fff,
+    0x0000_8000,
+    0x0000_ffff,
+    0x7fff_ffff,
+    0x8000_0000,
+    0xffff_ffff,
 ];
 
 pub(crate) const MAX_LEN: usize = 64 * 1024;
@@ -126,9 +133,7 @@ pub fn apply(kind: Mutation, input: &mut Vec<u8>, other: &[u8], rng: &mut Rng) {
             }
             let at = rng.below(input.len() + 1);
             let count = rng.between(1, 16).min(MAX_LEN - input.len());
-            let fill = if rng.one_in(2) {
-                rng.byte()
-            } else if input.is_empty() {
+            let fill = if rng.one_in(2) || input.is_empty() {
                 rng.byte()
             } else {
                 input[rng.below(input.len())]
@@ -260,6 +265,9 @@ mod tests {
                 changed += 1;
             }
         }
-        assert!(changed > 90, "havoc should almost always mutate ({changed}/100)");
+        assert!(
+            changed > 90,
+            "havoc should almost always mutate ({changed}/100)"
+        );
     }
 }

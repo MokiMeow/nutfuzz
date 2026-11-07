@@ -67,12 +67,9 @@ fn progress_reports_fixed_execution_intervals() {
         ..Config::default()
     };
     let mut executions = Vec::new();
-    let report = fuzz_with_progress(
-        target::parse_nested_fixed,
-        &seeds(),
-        &config,
-        |progress| executions.push(progress.executions),
-    );
+    let report = fuzz_with_progress(target::parse_nested_fixed, &seeds(), &config, |progress| {
+        executions.push(progress.executions)
+    });
     assert_eq!(report.executions, 25);
     assert_eq!(executions, vec![10, 20]);
 }
@@ -277,4 +274,31 @@ fn checksum_fixup_opens_a_gate_that_mutation_alone_cannot() {
         !with.findings.is_empty(),
         "recomputing the checksum should make the structured gate reachable"
     );
+}
+
+#[test]
+fn progress_reports_an_interval_crossed_by_stability_checks() {
+    fn target(input: &[u8], coverage: &mut nutfuzz::Coverage) -> nutfuzz::Outcome {
+        coverage.trace(input.len());
+        nutfuzz::Outcome::Ok
+    }
+    fn append_trailer(input: &mut Vec<u8>) {
+        input.extend_from_slice(&[0xff; 100]);
+    }
+    let mut reported = Vec::new();
+    let report = nutfuzz::fuzzer::fuzz_with_progress(
+        target,
+        &[b"A".to_vec()],
+        &Config {
+            seed: 1,
+            max_iterations: 1,
+            progress_interval: 2,
+            stability_runs: 3,
+            fixup: Some(append_trailer),
+            ..Config::default()
+        },
+        |progress| reported.push(progress.executions),
+    );
+    assert_eq!(report.executions, 3);
+    assert_eq!(reported, [3]);
 }

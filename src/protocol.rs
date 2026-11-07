@@ -30,6 +30,9 @@ pub fn read_hello(reader: &mut impl Read) -> io::Result<()> {
 }
 
 pub fn write_run(writer: &mut impl Write, input: &[u8]) -> io::Result<()> {
+    if input.len() > MAX_FRAME_SIZE - 5 {
+        return Err(invalid("input exceeds the protocol frame limit"));
+    }
     write_frame(writer, &message(RUN, input))
 }
 
@@ -39,30 +42,38 @@ pub fn read_run(reader: &mut impl Read) -> io::Result<Vec<u8>> {
     Ok(body.to_vec())
 }
 
-pub fn write_reply(
-    writer: &mut impl Write,
-    reply: &ForkserverReply,
-) -> io::Result<()> {
-    let mut body = Vec::new();
+pub fn write_reply(writer: &mut impl Write, reply: &ForkserverReply) -> io::Result<()> {
     let (kind, code, result_message) = match &reply.result {
         RunResult::Exited(code) => (0, *code, ""),
         RunResult::Crashed(signal, name) => (1, *signal, name.as_str()),
         RunResult::Hang => (2, 0, ""),
         RunResult::HarnessError(error) => (3, 0, error.as_str()),
     };
+    // Validate the complete encoded size before allocating or iterating over
+    // caller-supplied coverage. The decoder's cap must also bound the encoder.
+    let coverage_bytes = reply
+        .coverage
+        .len()
+        .checked_mul(5)
+        .ok_or_else(|| invalid("coverage map is too large"))?;
+    let frame_size = 16usize
+        .checked_add(result_message.len())
+        .and_then(|size| size.checked_add(coverage_bytes))
+        .filter(|&size| size <= MAX_FRAME_SIZE)
+        .ok_or_else(|| invalid("reply exceeds the protocol frame limit"))?;
+    let mut body = Vec::with_capacity(frame_size - 5);
     body.push(kind);
     body.extend_from_slice(&code.to_le_bytes());
     let message_bytes = result_message.as_bytes();
-    let message_len = u16::try_from(message_bytes.len())
-        .map_err(|_| invalid("result message is too long"))?;
+    let message_len =
+        u16::try_from(message_bytes.len()).map_err(|_| invalid("result message is too long"))?;
     body.extend_from_slice(&message_len.to_le_bytes());
     body.extend_from_slice(message_bytes);
-    let coverage_len = u32::try_from(reply.coverage.len())
-        .map_err(|_| invalid("coverage map is too large"))?;
+    let coverage_len =
+        u32::try_from(reply.coverage.len()).map_err(|_| invalid("coverage map is too large"))?;
     body.extend_from_slice(&coverage_len.to_le_bytes());
     for &(index, value) in &reply.coverage {
-        let index =
-            u32::try_from(index).map_err(|_| invalid("coverage index is too large"))?;
+        let index = u32::try_from(index).map_err(|_| invalid("coverage index is too large"))?;
         body.extend_from_slice(&index.to_le_bytes());
         body.push(value);
     }

@@ -16,10 +16,7 @@ impl ResourceLimits {
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn configure(
-    command: &mut Command,
-    limits: ResourceLimits,
-) -> Result<(), String> {
+pub(crate) fn configure(command: &mut Command, limits: ResourceLimits) -> Result<(), String> {
     use std::os::unix::process::CommandExt;
 
     unsafe {
@@ -34,10 +31,7 @@ pub(crate) fn configure(
 }
 
 #[cfg(not(target_os = "linux"))]
-pub(crate) fn configure(
-    _command: &mut Command,
-    limits: ResourceLimits,
-) -> Result<(), String> {
+pub(crate) fn configure(_command: &mut Command, limits: ResourceLimits) -> Result<(), String> {
     if limits.is_empty() {
         Ok(())
     } else {
