@@ -163,6 +163,36 @@ fn trickled_handshake_cannot_reset_the_deadline() {
 const HELLO: &str = "dd bs=1 count=9 of=/dev/null 2>/dev/null; \
     printf '\\005\\000\\000\\000\\001\\000\\000\\000\\001'";
 
+#[test]
+fn script_fixtures_remain_executable_during_parallel_forks() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+    use std::sync::Barrier;
+
+    let ready = Barrier::new(5);
+    let script = Script::new("parallel-writer", "exit 0");
+    let body = format!("exit 0\n# {}", "x".repeat(32 * 1024));
+    std::thread::scope(|scope| {
+        for _ in 0..4 {
+            scope.spawn(|| {
+                ready.wait();
+                for _ in 0..256 {
+                    let mut command = Command::new("/bin/true");
+                    // Force fork, just as ForkserverTarget's process-group
+                    // setup does. The callback itself performs no work.
+                    unsafe { command.pre_exec(|| Ok(())) };
+                    assert!(command.status().unwrap().success());
+                }
+            });
+        }
+        ready.wait();
+        for _ in 0..128 {
+            script.replace(&body);
+            assert!(Command::new(&script.0).status().unwrap().success());
+        }
+    });
+}
+
 struct Script(std::path::PathBuf);
 
 impl Script {
@@ -174,8 +204,27 @@ impl Script {
     }
 
     fn replace(&self, body: &str) {
+        use std::io::Write;
         use std::os::unix::fs::PermissionsExt;
-        std::fs::write(&self.0, format!("#!/bin/sh\n{body}\n")).unwrap();
+        use std::process::{Command, Stdio};
+
+        // A parallel test can fork while this executable is open for writing,
+        // inheriting its writer until exec and causing ETXTBSY in this test.
+        // Write in a child instead, so the test process never owns that fd.
+        let mut writer = Command::new("/bin/sh")
+            .args(["-c", "umask 077; cat > \"$1\"", "nutfuzz-script-writer"])
+            .arg(&self.0)
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let write_result = writer
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(format!("#!/bin/sh\n{body}\n").as_bytes());
+        let status = writer.wait().unwrap();
+        write_result.unwrap();
+        assert!(status.success(), "script writer failed: {status}");
         std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
 }
